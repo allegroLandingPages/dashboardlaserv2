@@ -146,7 +146,7 @@ export default function StockDashboard() {
       </datalist>
 
         <div className="header-content">
-          <h1 className="header-title">Consulta de Estoque (L05, LOJA e REDE)</h1>
+          <h1 className="filters-title">Consulta de Estoque (L05, LOJA e REDE)</h1>
         </div>
 
       <main className="main-content">
