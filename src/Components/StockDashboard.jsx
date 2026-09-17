@@ -2,6 +2,9 @@ import React, { useState, useMemo } from 'react';
 import Papa from 'papaparse';
 import './Dashboard.css';
 
+const formatCurrency = (value) => 
+  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
+
 const resolveProductCode = (inputStr, dataset) => {
   if (!inputStr) return null;
   const upperInput = String(inputStr).trim().toUpperCase();
@@ -39,18 +42,41 @@ export default function StockDashboard() {
       header: false,
       skipEmptyLines: true,
       complete: (results) => {
+        // Encontra dinamicamente a linha que contém os cabeçalhos para evitar erros de colunas que mudam de posição
+        const headerRow = results.data.find(row => String(row[1] || '').trim().toUpperCase() === 'CÓDIGO');
+        
+        let l05Idx = 10, lojaIdx = 11, redeIdx = 15, vendaIdx = 22, catIdx = 35; // Índices base como fallback
+        
+        if (headerRow) {
+          const getIdx = (name, fallback) => {
+             const idx = headerRow.findIndex(h => String(h || '').trim().toUpperCase() === name.toUpperCase());
+             return idx !== -1 ? idx : fallback;
+          };
+          l05Idx = getIdx('L05', l05Idx);
+          lojaIdx = getIdx('LOJA', lojaIdx);
+          redeIdx = getIdx('REDE', redeIdx);
+          vendaIdx = getIdx('VENDA', vendaIdx);
+        }
+
         const parsedData = results.data
           .filter((row, index) => index > 0 && row[1] && String(row[1]).trim().toUpperCase() !== 'CÓDIGO')
-          .map(row => ({
-            section: String(row[0] || '').trim(),
-            code: String(row[1] || '').trim(),
-            name: String(row[2] || '').trim(),
-            marca: String(row[3] || '').trim(),
-            l05: parseInt(row[10]) || 0,
-            loja: parseInt(row[11]) || 0,
-            rede: parseInt(row[15]) || 0,
-            category: String(row[33] || '').trim() // Extração da coluna 35 para Categoria
-          }));
+          .map(row => {
+            // Tratamento agressivo para transformar "R$ 2.960,00" em número (2960.00)
+            const rawVendaStr = String(row[vendaIdx] || '');
+            const cleanVenda = rawVendaStr.replace(/[^\d,-]/g, '').replace(',', '.');
+
+            return {
+              section: String(row[0] || '').trim(),
+              code: String(row[1] || '').trim(),
+              name: String(row[2] || '').trim(),
+              marca: String(row[3] || '').trim(),
+              l05: parseInt(row[l05Idx]) || 0,
+              loja: parseInt(row[lojaIdx]) || 0,
+              rede: parseInt(row[redeIdx]) || 0,
+              venda: parseFloat(cleanVenda) || 0,
+              category: String(row[catIdx] || '').trim() 
+            };
+          });
         
         setData(parsedData);
       }
@@ -110,7 +136,6 @@ export default function StockDashboard() {
     return data.find(item => item.code === activeSingleCode) || null;
   }, [data, activeSingleCode]);
 
-  // Aplica os filtros de Marca e Categoria simultaneamente
   const tableData = useMemo(() => {
     let filtered = data;
     
@@ -126,13 +151,14 @@ export default function StockDashboard() {
   }, [data, selectedMarca, selectedCategory]);
 
   const filteredTotals = useMemo(() => {
-    if (!selectedMarca && !selectedCategory) return { l05: 0, loja: 0, rede: 0 };
+    if (!selectedMarca && !selectedCategory) return { l05: 0, loja: 0, rede: 0, patrimonio: 0 };
     return tableData.reduce((acc, curr) => {
       acc.l05 += curr.l05;
       acc.loja += curr.loja;
       acc.rede += curr.rede;
+      acc.patrimonio += (curr.rede * curr.venda); // Multiplica o valor de venda pelo estoque disponível
       return acc;
-    }, { l05: 0, loja: 0, rede: 0 });
+    }, { l05: 0, loja: 0, rede: 0, patrimonio: 0 });
   }, [tableData, selectedMarca, selectedCategory]);
 
   return (
@@ -145,9 +171,11 @@ export default function StockDashboard() {
         {uniqueProductsData.map((prod) => <option key={`n-${prod.code}`} value={prod.name} />)}
       </datalist>
 
+      <header className="">
         <div className="header-content">
           <h1 className="filters-title">Consulta de Estoque (L05, LOJA e REDE)</h1>
         </div>
+      </header>
 
       <main className="main-content">
         
@@ -227,8 +255,8 @@ export default function StockDashboard() {
 
         {searchedProduct && (
           <section className="results-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', marginBottom: '2rem' }}>
-            <div className="card kpi-card" style={{ gridColumn: '1 / -1', flexDirection: 'row', justifyContent: 'space-between', padding: '1.5rem 2rem' }}>
-              <div style={{ textAlign: 'left' }}>
+            <div className="card kpi-card" style={{ gridColumn: '1 / -1', flexDirection: 'row', justifyContent: 'space-between', padding: '1.5rem 2rem', flexWrap: 'wrap', gap: '1rem' }}>
+              <div style={{ textAlign: 'left', minWidth: '300px' }}>
                 <span className="kpi-label" style={{ color: '#3b82f6' }}>CÓD. {searchedProduct.code}</span>
                 <h3 style={{ margin: '0.5rem 0', fontSize: '1.25rem', color: '#1f2937' }}>{searchedProduct.name}</h3>
                 <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
@@ -240,7 +268,11 @@ export default function StockDashboard() {
                   </span>
                 </div>
               </div>
-              <div style={{ display: 'flex', gap: '2rem', textAlign: 'center' }}>
+              <div style={{ display: 'flex', gap: '2rem', textAlign: 'center', flexWrap: 'wrap' }}>
+                <div>
+                  <span className="kpi-label">Preço Venda</span>
+                  <span className="kpi-value" style={{ fontSize: '2.5rem', background: 'none', color: '#f59e0b' }}>{formatCurrency(searchedProduct.venda)}</span>
+                </div>
                 <div>
                   <span className="kpi-label">Estoque L05</span>
                   <span className="kpi-value" style={{ fontSize: '2.5rem', background: 'none', color: '#059669' }}>{searchedProduct.l05}</span>
@@ -259,7 +291,11 @@ export default function StockDashboard() {
         )}
 
         {(selectedMarca || selectedCategory) && !activeSingleCode && (
-          <section className="results-grid" style={{ gridTemplateColumns: '1fr 1fr 1fr', marginBottom: '2rem' }}>
+          <section className="results-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', marginBottom: '2rem' }}>
+             <div className="card kpi-card">
+                <span className="kpi-label">Potencial de Receita (REDE)</span>
+                <span className="kpi-value" style={{ fontSize: '2.5rem', background: 'none', color: '#f59e0b' }}>{formatCurrency(filteredTotals.patrimonio)}</span>
+             </div>
              <div className="card kpi-card">
                 <span className="kpi-label">Total L05 (Filtrado)</span>
                 <span className="kpi-value" style={{ fontSize: '2.5rem', background: 'none', color: '#059669' }}>{filteredTotals.l05}</span>
@@ -293,6 +329,7 @@ export default function StockDashboard() {
                     <th>Descrição</th>
                     <th>Marca</th>
                     <th>Categoria</th>
+                    <th>Preço Venda</th>
                     <th>Estoque L05</th>
                     <th>Estoque LOJA</th>
                     <th>Estoque REDE</th>
@@ -305,6 +342,7 @@ export default function StockDashboard() {
                       <td>{item.name}</td>
                       <td>{item.marca}</td>
                       <td>{item.category}</td>
+                      <td style={{ fontWeight: 'bold', color: item.venda > 0 ? '#f59e0b' : '#9ca3af' }}>{formatCurrency(item.venda)}</td>
                       <td style={{ fontWeight: 'bold', color: item.l05 > 0 ? '#059669' : '#9ca3af' }}>{item.l05}</td>
                       <td style={{ fontWeight: 'bold', color: item.loja > 0 ? '#2563eb' : '#9ca3af' }}>{item.loja}</td>
                       <td style={{ fontWeight: 'bold', color: item.rede > 0 ? '#dc2626' : '#9ca3af' }}>{item.rede}</td>
@@ -312,7 +350,7 @@ export default function StockDashboard() {
                   ))}
                   {tableData.length === 0 && (
                     <tr>
-                      <td colSpan="7" style={{ textAlign: 'center', padding: '2rem' }}>Nenhum produto encontrado com esses filtros.</td>
+                      <td colSpan="8" style={{ textAlign: 'center', padding: '2rem' }}>Nenhum produto encontrado com esses filtros.</td>
                     </tr>
                   )}
                 </tbody>
