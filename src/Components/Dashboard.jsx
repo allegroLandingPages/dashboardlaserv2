@@ -26,12 +26,12 @@ const PrintIcon = () => (
 const SERVICE_KEYWORDS = ['ACRÉSCIMO', 'ACRESCIMO', 'GARANTIA', 'RECARGA', 'SEGURO'];
 const SERVICE_CODES = ['19466', '15489'];
 const PIE_COLORS = ['#059669', '#f97316']; 
+
 const CATEGORY_COLORS = [
   '#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', 
   '#ec4899', '#06b6d4', '#f97316', '#64748b', '#84cc16'
 ];
 
-// --- MAPEAMENTO DE LOJAS VIA JSON ---
 const RAW_STORE_JSON = {
   "Lojas de Shoppping em Recife": { "04": "S.Guararapes", "33": "S.Boa Vista", "123": "S.North Way Paulista", "124": "S.Tacaruna", "130": "S.Patteo Olinda" },
   "Lojas Região Metropolitana Recife": { "01": "Centro", "09": "Palma", "13": "Paulista", "23": "Concordia", "24": "Camaragibe", "46": "Imbiribeira", "57": "C. Amarela 1", "58": "C Amarela 2", "60": "Afogados", "61": "S. Lourenço", "62": "Abreu e Lima", "64": "Agua Fria", "78": "Peixinhos 2", "79": "Peixinhos", "87": "Jaboatão centro", "89": "Palma/Concordia", "95": "Beberibe", "114": "Cavaleiro", "115": "Prazeres 01", "117": "Prazeres 02", "129": "Cavaleiro II", "132": "Igarassu" },
@@ -63,13 +63,18 @@ Object.entries(RAW_STORE_JSON).forEach(([regionName, stores]) => {
   Object.entries(stores).forEach(([id, name]) => {
     const display = `[${id}] ${name} - ${cleanRegion} (${state})`;
     STORE_MAP[id] = display;
-    STORE_MAP[parseInt(id, 10).toString()] = display; // Trata possíveis números sem zero à esquerda
+    STORE_MAP[parseInt(id, 10).toString()] = display; 
   });
 });
 
 export default function Dashboard() {
   const [data, setData] = useState([]);
-  const [productCode, setProductCode] = useState('');
+  
+  // Estados para Produto Único (Código e Nome separados)
+  const [singleInputCode, setSingleInputCode] = useState('');
+  const [singleInputName, setSingleInputName] = useState('');
+  const [activeSingleCode, setActiveSingleCode] = useState(''); // Código que gera o gráfico
+
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
@@ -90,13 +95,63 @@ export default function Dashboard() {
 
   const getPrintClass = (id) => (isPrinting && printSection === id ? 'print-active' : '');
 
+  // Múltiplos Produtos (Código e Nome separados em cada linha)
   const [multiProducts, setMultiProducts] = useState([
-    { code: '', startDate: '', endDate: '' },
-    { code: '', startDate: '', endDate: '' },
-    { code: '', startDate: '', endDate: '' },
-    { code: '', startDate: '', endDate: '' },
-    { code: '', startDate: '', endDate: '' }
+    { code: '', name: '', startDate: '', endDate: '' },
+    { code: '', name: '', startDate: '', endDate: '' },
+    { code: '', name: '', startDate: '', endDate: '' },
+    { code: '', name: '', startDate: '', endDate: '' },
+    { code: '', name: '', startDate: '', endDate: '' }
   ]);
+
+  // --- LÓGICA DE AUTOCOMPLETAR: PRODUTO ÚNICO ---
+  const handleSingleCodeBlur = () => {
+    if (!singleInputCode) return;
+    const match = data.find(item => item.code.toUpperCase() === singleInputCode.trim().toUpperCase());
+    if (match) {
+      setSingleInputName(match.name);
+      setActiveSingleCode(match.code);
+    } else {
+      setActiveSingleCode(singleInputCode.trim()); 
+    }
+  };
+
+  const handleSingleNameBlur = () => {
+    if (!singleInputName) return;
+    const upperInput = singleInputName.trim().toUpperCase();
+    const match = data.find(item => item.name.toUpperCase().includes(upperInput));
+    if (match) {
+      setSingleInputCode(match.code);
+      setSingleInputName(match.name); // Ajusta para o nome exato
+      setActiveSingleCode(match.code);
+    }
+  };
+
+  // --- LÓGICA DE AUTOCOMPLETAR: MÚLTIPLOS PRODUTOS ---
+  const handleMultiCodeBlur = (index) => {
+    const mp = multiProducts[index];
+    if (!mp.code) return;
+    const match = data.find(item => item.code.toUpperCase() === mp.code.trim().toUpperCase());
+    if (match) {
+      const newMulti = [...multiProducts];
+      newMulti[index].code = match.code;
+      newMulti[index].name = match.name;
+      setMultiProducts(newMulti);
+    }
+  };
+
+  const handleMultiNameBlur = (index) => {
+    const mp = multiProducts[index];
+    if (!mp.name) return;
+    const upperInput = mp.name.trim().toUpperCase();
+    const match = data.find(item => item.name.toUpperCase().includes(upperInput));
+    if (match) {
+      const newMulti = [...multiProducts];
+      newMulti[index].code = match.code;
+      newMulti[index].name = match.name;
+      setMultiProducts(newMulti);
+    }
+  };
 
   const handleMultiProductChange = (index, field, value) => {
     const newMulti = [...multiProducts];
@@ -122,8 +177,6 @@ export default function Dashboard() {
           const rawStoreId = String(row[4] || '').trim();
           
           const isService = SERVICE_KEYWORDS.some(svc => nameUpper.includes(svc)) || SERVICE_CODES.includes(codeStr);
-          
-          // Formatação da Loja
           const storeDisplay = STORE_MAP[rawStoreId] || (rawStoreId ? `[${rawStoreId}] Loja Desconhecida` : 'N/A');
 
           return {
@@ -144,6 +197,17 @@ export default function Dashboard() {
       }
     });
   };
+
+  // Listas para os Datalists (Sugestões nativas)
+  const uniqueProductsData = useMemo(() => {
+    const map = new Map();
+    data.forEach(item => {
+      if (!map.has(item.code) && !item.isService) {
+        map.set(item.code, item.name);
+      }
+    });
+    return Array.from(map.entries()).map(([code, name]) => ({ code, name }));
+  }, [data]);
 
   const { minCsvDate, maxCsvDate } = useMemo(() => {
     if (!data.length) return { minCsvDate: null, maxCsvDate: null };
@@ -227,16 +291,20 @@ export default function Dashboard() {
     return result;
   }, [regularData]);
 
+  // Geração de Dados para o Produto Único usando o "activeSingleCode"
   const { totalSold, chartData, searchedProductName } = useMemo(() => {
-    if (!data.length || !productCode) return { totalSold: 0, chartData: [], searchedProductName: '' };
-    const nameMatch = data.find(item => item.code === productCode);
+    if (!data.length || !activeSingleCode) return { totalSold: 0, chartData: [], searchedProductName: '' };
+    
+    const nameMatch = data.find(item => item.code === activeSingleCode);
     const name = nameMatch ? nameMatch.name : 'Produto não encontrado';
-    const targetData = dateFilteredData.filter(item => item.code === productCode);
+    const targetData = dateFilteredData.filter(item => item.code === activeSingleCode);
+    
     const total = targetData.reduce((acc, curr) => acc + curr.qty, 0);
     const aggregatedByDate = targetData.reduce((acc, curr) => {
       acc[curr.dateStr] = (acc[curr.dateStr] || 0) + curr.qty;
       return acc;
     }, {});
+    
     const chart = Object.keys(aggregatedByDate).map(date => ({
       data: date,
       quantidade: aggregatedByDate[date]
@@ -245,26 +313,34 @@ export default function Dashboard() {
       const [d2, m2, y2] = b.data.split('/');
       return new Date(`${y1}-${m1}-${d1}`) - new Date(`${y2}-${m2}-${d2}`);
     });
+    
     return { totalSold: total, chartData: chart, searchedProductName: name };
-  }, [data, dateFilteredData, productCode]);
+  }, [data, dateFilteredData, activeSingleCode]);
 
+  // Geração de Dados para os Múltiplos Produtos
   const multiProductsData = useMemo(() => {
     if (!data.length) return [];
     return multiProducts.map(filter => {
-      if (!filter.code) return null;
-      const nameMatch = data.find(item => item.code === filter.code);
+      if (!filter.code) return null; // Utiliza apenas o código para filtrar
+      
+      const targetCode = filter.code.trim();
+      const nameMatch = data.find(item => item.code === targetCode);
       const name = nameMatch ? nameMatch.name : 'Produto não encontrado';
-      let targetData = data.filter(item => item.code === filter.code);
+      
+      let targetData = data.filter(item => item.code === targetCode);
+      
       if (filter.startDate || filter.endDate) {
         const start = filter.startDate ? new Date(`${filter.startDate}T00:00:00`) : new Date('2000-01-01');
         const end = filter.endDate ? new Date(`${filter.endDate}T23:59:59`) : new Date('2100-01-01');
         targetData = targetData.filter(item => item.dateObj >= start && item.dateObj <= end);
       }
+      
       const total = targetData.reduce((acc, curr) => acc + curr.qty, 0);
       const aggregatedByDate = targetData.reduce((acc, curr) => {
         acc[curr.dateStr] = (acc[curr.dateStr] || 0) + curr.qty;
         return acc;
       }, {});
+      
       const chart = Object.keys(aggregatedByDate).map(date => ({
         data: date,
         quantidade: aggregatedByDate[date]
@@ -273,7 +349,8 @@ export default function Dashboard() {
         const [d2, m2, y2] = b.data.split('/');
         return new Date(`${y1}-${m1}-${d1}`) - new Date(`${y2}-${m2}-${d2}`);
       });
-      return { code: filter.code, name, total, chartData: chart };
+      
+      return { code: targetCode, name, total, chartData: chart };
     });
   }, [data, multiProducts]);
 
@@ -364,6 +441,19 @@ export default function Dashboard() {
 
   return (
     <div className={`dashboard-container ${isPrinting ? 'is-printing' : ''}`}>
+      
+      {/* DATALISTS SEPARADOS PARA AUTOCOMPLETE */}
+      <datalist id="codes-datalist">
+        {uniqueProductsData.map((prod) => (
+          <option key={`c-${prod.code}`} value={prod.code} />
+        ))}
+      </datalist>
+      <datalist id="names-datalist">
+        {uniqueProductsData.map((prod) => (
+          <option key={`n-${prod.code}`} value={prod.name} />
+        ))}
+      </datalist>
+
       <header className={`header ${isPrinting ? 'no-print' : ''}`}>
         <div className="header-content">
           <img src={logo} alt="Logo" className="logo-img" />
@@ -527,10 +617,34 @@ export default function Dashboard() {
               </div>
 
               <div className="card kpi-card" style={{ alignSelf: 'start' }}>
-                <div className="input-group no-print" style={{ width: '100%', marginBottom: '1.5rem', textAlign: 'left' }}>
-                  <label>Pesquisar Código Único (Filtro Global)</label>
-                  <input type="text" placeholder="Ex: 1057" value={productCode} onChange={e => setProductCode(e.target.value)} className="input-field" />
+                
+                <div className="no-print" style={{ width: '100%', marginBottom: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem', textAlign: 'left' }}>
+                  <div className="input-group">
+                    <label>Código do Produto</label>
+                    <input 
+                      type="text" 
+                      list="codes-datalist"
+                      placeholder="Ex: 1057" 
+                      value={singleInputCode} 
+                      onChange={e => setSingleInputCode(e.target.value)} 
+                      onBlur={handleSingleCodeBlur}
+                      className="input-field" 
+                    />
+                  </div>
+                  <div className="input-group">
+                    <label>Nome do Produto (SKU)</label>
+                    <input 
+                      type="text" 
+                      list="names-datalist"
+                      placeholder="Ex: TV 32 POLEGADAS..." 
+                      value={singleInputName} 
+                      onChange={e => setSingleInputName(e.target.value)} 
+                      onBlur={handleSingleNameBlur}
+                      className="input-field" 
+                    />
+                  </div>
                 </div>
+
                 <span className="kpi-label">Total Vendido</span>
                 <span className="kpi-value">{totalSold}</span>
                 <span className="kpi-subtext" style={{ fontWeight: 'bold', color: '#374151', marginTop: '0.75rem' }}>
@@ -564,7 +678,7 @@ export default function Dashboard() {
               <div className="section-header">
                 <div>
                   <h3 className="chart-title">Análise Individualizada (Até 5 Produtos)</h3>
-                  <p className="kpi-subtext no-print" style={{ margin: 0 }}>Compara múltiplos códigos configurando o período independente.</p>
+                  <p className="kpi-subtext no-print" style={{ margin: 0 }}>Compara múltiplos códigos configurando o período independente. (Ignora data global).</p>
                 </div>
                 <button className="print-btn no-print" onClick={() => handlePrint('prod-multi')}>
                   <PrintIcon /> Imprimir Bloco
@@ -575,15 +689,38 @@ export default function Dashboard() {
                 {multiProducts.map((mp, idx) => (
                   <div key={idx} style={{ display: 'flex', gap: '1rem', alignItems: 'flex-end', flexWrap: 'wrap', padding: '1rem', backgroundColor: '#ffffff', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
                     <span style={{ fontWeight: 'bold', color: '#9ca3af', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '24px', height: '24px', backgroundColor: '#f3f4f6', borderRadius: '50%' }}>{idx + 1}</span>
-                    <div className="input-group" style={{ flex: '1', minWidth: '150px' }}>
-                      <label>Código do Produto</label>
-                      <input type="text" value={mp.code} onChange={e => handleMultiProductChange(idx, 'code', e.target.value)} className="input-field" placeholder="Ex: 1057" />
+                    
+                    <div className="input-group" style={{ flex: '1', minWidth: '100px' }}>
+                      <label>Código</label>
+                      <input 
+                        type="text" 
+                        list="codes-datalist"
+                        value={mp.code} 
+                        onChange={e => handleMultiProductChange(idx, 'code', e.target.value)}
+                        onBlur={() => handleMultiCodeBlur(idx)}
+                        className="input-field" 
+                        placeholder="Ex: 1057" 
+                      />
                     </div>
-                    <div className="input-group" style={{ flex: '1', minWidth: '150px' }}>
+
+                    <div className="input-group" style={{ flex: '2', minWidth: '200px' }}>
+                      <label>Nome do Produto (SKU)</label>
+                      <input 
+                        type="text" 
+                        list="names-datalist"
+                        value={mp.name} 
+                        onChange={e => handleMultiProductChange(idx, 'name', e.target.value)}
+                        onBlur={() => handleMultiNameBlur(idx)}
+                        className="input-field" 
+                        placeholder="Ex: TV 32..." 
+                      />
+                    </div>
+
+                    <div className="input-group" style={{ flex: '1', minWidth: '130px' }}>
                       <label>Data Inicial</label>
                       <input type="date" value={mp.startDate} onChange={e => handleMultiProductChange(idx, 'startDate', e.target.value)} className="input-field" />
                     </div>
-                    <div className="input-group" style={{ flex: '1', minWidth: '150px' }}>
+                    <div className="input-group" style={{ flex: '1', minWidth: '130px' }}>
                       <label>Data Final</label>
                       <input type="date" value={mp.endDate} onChange={e => handleMultiProductChange(idx, 'endDate', e.target.value)} className="input-field" />
                     </div>
