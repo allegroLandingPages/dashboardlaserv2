@@ -415,3 +415,6 @@
     page-break-inside: avoid;
   }
 }
+.tspan{
+  font-size:2px
+}

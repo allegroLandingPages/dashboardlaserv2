@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import Papa from 'papaparse';
 import { 
   BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer, 
-  PieChart, Pie, Cell, Legend 
+  PieChart, Pie, Cell, Legend, Treemap 
 } from 'recharts';
 import './Dashboard.css';
 import logo from '../assets/logo.png';
@@ -31,6 +31,30 @@ const CATEGORY_COLORS = [
   '#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', 
   '#ec4899', '#06b6d4', '#f97316', '#64748b', '#84cc16'
 ];
+
+// Componente Customizado para o Interior do Heatmap/Treemap
+const TreemapCustomContent = ({ depth, x, y, width, height, index, name, value }) => {
+  return (
+    <g>
+      <rect
+        x={x}
+        y={y}
+        width={width}
+        height={height}
+        fill={CATEGORY_COLORS[index % CATEGORY_COLORS.length]}
+        stroke="#fff"
+        strokeWidth={3}
+      />
+      {/* Exibe o texto apenas se o bloco for grande o suficiente para não sobrepor */}
+      {width > 65 && height > 40 && (
+        <text x={x + width / 2} y={y + height / 2} textAnchor="middle" fill="#fff" fontSize={10} fontWeight="normal">
+          <tspan x={x + width / 2} dy="-0.5em">{name}</tspan>
+          <tspan x={x + width / 2} dy="1.4em" fontSize={12} fontWeight="normal">{formatCurrency(value)}</tspan>
+        </text>
+      )}
+    </g>
+  );
+};
 
 const RAW_STORE_JSON = {
   "Lojas de Shoppping em Recife": { "04": "S.Guararapes", "33": "S.Boa Vista", "123": "S.North Way Paulista", "124": "S.Tacaruna", "130": "S.Patteo Olinda" },
@@ -67,13 +91,30 @@ Object.entries(RAW_STORE_JSON).forEach(([regionName, stores]) => {
   });
 });
 
+const resolveProductCode = (inputStr, dataset) => {
+  if (!inputStr) return null;
+  const upperInput = String(inputStr).trim().toUpperCase();
+  
+  let match = dataset.find(item => item.code.toUpperCase() === upperInput);
+  
+  if (!match && upperInput.includes(' - ')) {
+    const extractedCode = upperInput.split(' - ')[0].trim();
+    match = dataset.find(item => item.code.toUpperCase() === extractedCode);
+  }
+  
+  if (!match) {
+    match = dataset.find(item => item.name.toUpperCase().includes(upperInput));
+  }
+
+  return match ? match.code : String(inputStr).trim(); 
+};
+
 export default function Dashboard() {
   const [data, setData] = useState([]);
   
-  // Estados para Produto Único (Código e Nome separados)
   const [singleInputCode, setSingleInputCode] = useState('');
   const [singleInputName, setSingleInputName] = useState('');
-  const [activeSingleCode, setActiveSingleCode] = useState(''); // Código que gera o gráfico
+  const [activeSingleCode, setActiveSingleCode] = useState(''); 
 
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -95,7 +136,6 @@ export default function Dashboard() {
 
   const getPrintClass = (id) => (isPrinting && printSection === id ? 'print-active' : '');
 
-  // Múltiplos Produtos (Código e Nome separados em cada linha)
   const [multiProducts, setMultiProducts] = useState([
     { code: '', name: '', startDate: '', endDate: '' },
     { code: '', name: '', startDate: '', endDate: '' },
@@ -104,7 +144,6 @@ export default function Dashboard() {
     { code: '', name: '', startDate: '', endDate: '' }
   ]);
 
-  // --- LÓGICA DE AUTOCOMPLETAR: PRODUTO ÚNICO ---
   const handleSingleCodeBlur = () => {
     if (!singleInputCode) return;
     const match = data.find(item => item.code.toUpperCase() === singleInputCode.trim().toUpperCase());
@@ -122,12 +161,11 @@ export default function Dashboard() {
     const match = data.find(item => item.name.toUpperCase().includes(upperInput));
     if (match) {
       setSingleInputCode(match.code);
-      setSingleInputName(match.name); // Ajusta para o nome exato
+      setSingleInputName(match.name); 
       setActiveSingleCode(match.code);
     }
   };
 
-  // --- LÓGICA DE AUTOCOMPLETAR: MÚLTIPLOS PRODUTOS ---
   const handleMultiCodeBlur = (index) => {
     const mp = multiProducts[index];
     if (!mp.code) return;
@@ -198,7 +236,6 @@ export default function Dashboard() {
     });
   };
 
-  // Listas para os Datalists (Sugestões nativas)
   const uniqueProductsData = useMemo(() => {
     const map = new Map();
     data.forEach(item => {
@@ -271,6 +308,7 @@ export default function Dashboard() {
     };
   }, [dateFilteredData]);
 
+  // Mantive a lógica de agrupamento (2%) para não poluir o Heatmap com caixas minúsculas invisíveis
   const categoryRevenueData = useMemo(() => {
     const catMap = {};
     let totalRevenueFisico = 0;
@@ -291,7 +329,6 @@ export default function Dashboard() {
     return result;
   }, [regularData]);
 
-  // Geração de Dados para o Produto Único usando o "activeSingleCode"
   const { totalSold, chartData, searchedProductName } = useMemo(() => {
     if (!data.length || !activeSingleCode) return { totalSold: 0, chartData: [], searchedProductName: '' };
     
@@ -317,11 +354,10 @@ export default function Dashboard() {
     return { totalSold: total, chartData: chart, searchedProductName: name };
   }, [data, dateFilteredData, activeSingleCode]);
 
-  // Geração de Dados para os Múltiplos Produtos
   const multiProductsData = useMemo(() => {
     if (!data.length) return [];
     return multiProducts.map(filter => {
-      if (!filter.code) return null; // Utiliza apenas o código para filtrar
+      if (!filter.code) return null; 
       
       const targetCode = filter.code.trim();
       const nameMatch = data.find(item => item.code === targetCode);
@@ -442,16 +478,11 @@ export default function Dashboard() {
   return (
     <div className={`dashboard-container ${isPrinting ? 'is-printing' : ''}`}>
       
-      {/* DATALISTS SEPARADOS PARA AUTOCOMPLETE */}
       <datalist id="codes-datalist">
-        {uniqueProductsData.map((prod) => (
-          <option key={`c-${prod.code}`} value={prod.code} />
-        ))}
+        {uniqueProductsData.map((prod) => <option key={`c-${prod.code}`} value={prod.code} />)}
       </datalist>
       <datalist id="names-datalist">
-        {uniqueProductsData.map((prod) => (
-          <option key={`n-${prod.code}`} value={prod.name} />
-        ))}
+        {uniqueProductsData.map((prod) => <option key={`n-${prod.code}`} value={prod.name} />)}
       </datalist>
 
       <header className={`header ${isPrinting ? 'no-print' : ''}`}>
@@ -471,19 +502,18 @@ export default function Dashboard() {
               {dateError}
             </div>
           )}
-
-              <section className="card" style={{ border: '2px dashed #f97316', backgroundColor: '#fff7ed', textAlign: 'center' }}>
-              <h2 className="filters-title" style={{ borderBottom: 'none', color: '#c2410c', marginBottom: '0.5rem' }}>1. Importe o CSV de vendas</h2>
-              <input 
-                type="file" 
-                accept=".csv" 
-                onChange={handleFileUpload} 
-                className="file-input" 
-                style={{ margin: '0 auto', display: 'block' }} 
-              />
-            </section>
-          <div className="filters-grid">
           
+          <section className="card" style={{ border: '2px dashed #f97316', backgroundColor: '#fff7ed', textAlign: 'center' }}>
+          <h2 className="filters-title" style={{ borderBottom: 'none', color: '#c2410c', marginBottom: '0.5rem' }}>1. Importe o CSV de Estoque</h2>
+          <input 
+            type="file" 
+            accept=".csv" 
+            onChange={handleFileUpload} 
+            className="file-input" 
+            style={{ margin: '0 auto', display: 'block' }} 
+          />
+        </section>
+          <div className="filters-grid">
             <div className="input-group">
               <label>Data Inicial</label>
               <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="input-field" />
@@ -556,18 +586,21 @@ export default function Dashboard() {
                 </div>
 
                 <div className="card">
-                  <h3 className="chart-title" style={{ textAlign: 'center' }}>Faturamento por Categoria (Físicos)</h3>
+                  <h3 className="chart-title" style={{ textAlign: 'center' }}>Faturamento por Categoria (Heatmap)</h3>
                   <div className="chart-container" style={{ height: '320px' }}>
                     <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie data={categoryRevenueData} cx="50%" cy="45%" innerRadius={55} outerRadius={85} paddingAngle={2} dataKey="value">
-                          {categoryRevenueData.map((entry, index) => (
-                            <Cell key={`cell-cat-pie-${index}`} fill={CATEGORY_COLORS[index % CATEGORY_COLORS.length]} />
-                          ))}
-                        </Pie>
+                      {/* 
+                         TREEMAP sendo utilizado como visualização de HEATMAP 1D para Categorias 
+                      */}
+                      <Treemap
+                        data={categoryRevenueData}
+                        dataKey="value"
+                        aspectRatio={4 / 3}
+                        stroke="#fff"
+                        content={<TreemapCustomContent />}
+                      >
                         <Tooltip formatter={(value) => formatCurrency(value)} />
-                        <Legend verticalAlign="bottom" layout="horizontal" wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
-                      </PieChart>
+                      </Treemap>
                     </ResponsiveContainer>
                   </div>
                 </div>
