@@ -1,0 +1,852 @@
+import React, { useState, useMemo } from 'react';
+import Papa from 'papaparse';
+import { 
+  BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer, 
+  PieChart, Pie, Cell, Legend 
+} from 'recharts';
+import './Dashboard.css';
+import logo from '../assets/logo.png';
+
+const formatCurrency = (value) => 
+  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
+
+const formatDateBr = (dateObj) => {
+  if (!dateObj) return '';
+  return dateObj.toLocaleDateString('pt-BR');
+};
+
+const PrintIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="6 9 6 2 18 2 18 9"></polyline>
+    <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+    <rect x="6" y="14" width="12" height="8"></rect>
+  </svg>
+);
+
+const SERVICE_KEYWORDS = ['ACRÉSCIMO', 'ACRESCIMO', 'GARANTIA', 'RECARGA', 'SEGURO'];
+const SERVICE_CODES = ['19466', '15489'];
+const PIE_COLORS = ['#059669', '#f97316']; 
+
+const CATEGORY_COLORS = [
+  '#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', 
+  '#ec4899', '#06b6d4', '#f97316', '#64748b', '#84cc16'
+];
+
+export default function Dashboard() {
+  const [data, setData] = useState([]);
+  const [productCode, setProductCode] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('');
+  const [selectedStore, setSelectedStore] = useState('');
+  const [topProductsLimit, setTopProductsLimit] = useState(10);
+  const [activeTab, setActiveTab] = useState('visao-geral');
+
+  // Isolamento de Impressão (Impede adicionar blocos extras)
+  const [printSection, setPrintSection] = useState(null);
+  const isPrinting = printSection !== null;
+
+  const handlePrint = (sectionId) => {
+    setPrintSection(sectionId);
+    // Tempo reduzido e limpo via CSS
+    setTimeout(() => {
+      window.print();
+      setPrintSection(null);
+    }, 400); 
+  };
+
+  // Se a seção for a que está imprimindo, injeta a classe CSS "print-active"
+  const getPrintClass = (id) => (isPrinting && printSection === id ? 'print-active' : '');
+
+  const [multiProducts, setMultiProducts] = useState([
+    { code: '', startDate: '', endDate: '' },
+    { code: '', startDate: '', endDate: '' },
+    { code: '', startDate: '', endDate: '' },
+    { code: '', startDate: '', endDate: '' },
+    { code: '', startDate: '', endDate: '' }
+  ]);
+
+  const handleMultiProductChange = (index, field, value) => {
+    const newMulti = [...multiProducts];
+    newMulti[index][field] = value;
+    setMultiProducts(newMulti);
+  };
+
+  const handleFileUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    Papa.parse(file, {
+      header: false,
+      skipEmptyLines: true,
+      complete: (results) => {
+        const parsedData = results.data.map(row => {
+          const [day, month, year] = (row[3] || '').split('/');
+          const rawTotal = row[7] ? String(row[7]).replace(/\./g, '').replace(',', '.') : '0';
+          
+          const codeStr = String(row[0] || '').trim();
+          const nameStr = String(row[1] || '').trim();
+          const nameUpper = nameStr.toUpperCase();
+          
+          const isService = SERVICE_KEYWORDS.some(svc => nameUpper.includes(svc)) || SERVICE_CODES.includes(codeStr);
+
+          return {
+            code: codeStr,
+            name: nameStr || 'Sem Descrição', 
+            dateStr: row[3],
+            dateObj: new Date(`${year}-${month}-${day}T00:00:00`),
+            store: row[4] ? row[4].trim() : 'N/A',
+            qty: parseFloat(row[5]) || 0,
+            totalValue: parseFloat(rawTotal) || 0,
+            category: row[11] ? row[11].trim() : 'Indefinida',
+            city: row[16] ? row[16].trim() : 'Indefinida',
+            isService: isService
+          };
+        }).filter(item => !isNaN(item.dateObj));
+        
+        setData(parsedData);
+      }
+    });
+  };
+
+  const { minCsvDate, maxCsvDate } = useMemo(() => {
+    if (!data.length) return { minCsvDate: null, maxCsvDate: null };
+    let min = data[0].dateObj.getTime();
+    let max = data[0].dateObj.getTime();
+    for(let i = 1; i < data.length; i++) {
+      const time = data[i].dateObj.getTime();
+      if(time < min) min = time;
+      if(time > max) max = time;
+    }
+    return { minCsvDate: new Date(min), maxCsvDate: new Date(max) };
+  }, [data]);
+
+  const dateError = useMemo(() => {
+    if (!startDate && !endDate) return null;
+    if (!maxCsvDate || !minCsvDate) return null;
+    const start = startDate ? new Date(`${startDate}T00:00:00`) : minCsvDate;
+    const end = endDate ? new Date(`${endDate}T23:59:59`) : maxCsvDate;
+    if (end > maxCsvDate || start < minCsvDate) {
+      return `Atenção: Período selecionado fora do limite do arquivo. O CSV contém dados de ${formatDateBr(minCsvDate)} até ${formatDateBr(maxCsvDate)}.`;
+    }
+    return null;
+  }, [startDate, endDate, minCsvDate, maxCsvDate]);
+
+  const dateFilteredData = useMemo(() => {
+    if (!data.length) return [];
+    if (!startDate || !endDate) return data;
+    const start = new Date(`${startDate}T00:00:00`);
+    const end = new Date(`${endDate}T23:59:59`);
+    return data.filter(item => item.dateObj >= start && item.dateObj <= end);
+  }, [data, startDate, endDate]);
+
+  const regularData = useMemo(() => dateFilteredData.filter(item => !item.isService), [dateFilteredData]);
+  const serviceData = useMemo(() => dateFilteredData.filter(item => item.isService), [dateFilteredData]);
+
+  const totalDays = useMemo(() => {
+    if (!data.length) return 1;
+    if (startDate && endDate) {
+      const start = new Date(`${startDate}T00:00:00`);
+      const end = new Date(`${endDate}T23:59:59`);
+      return Math.max(1, Math.ceil((end - start) / (1000 * 60 * 60 * 24)));
+    }
+    return new Set(data.map(item => item.dateStr)).size || 1;
+  }, [data, startDate, endDate]);
+
+  const revenueOverview = useMemo(() => {
+    let totalProducts = 0;
+    let totalServices = 0;
+    dateFilteredData.forEach(item => {
+      if (item.isService) totalServices += item.totalValue;
+      else totalProducts += item.totalValue;
+    });
+    return {
+      totalGeral: totalProducts + totalServices,
+      totalProducts,
+      totalServices,
+      pieData: [
+        { name: 'Produtos Físicos', value: totalProducts },
+        { name: 'Serviços/Financeiro', value: totalServices }
+      ]
+    };
+  }, [dateFilteredData]);
+
+  const categoryRevenueData = useMemo(() => {
+    const catMap = {};
+    let totalRevenueFisico = 0;
+    regularData.forEach(item => {
+      if (!catMap[item.category]) catMap[item.category] = 0;
+      catMap[item.category] += item.totalValue;
+      totalRevenueFisico += item.totalValue;
+    });
+    const sortedCategories = Object.keys(catMap).map(cat => ({ name: cat, value: catMap[cat] })).sort((a, b) => b.value - a.value);
+    const threshold = totalRevenueFisico * 0.02;
+    const result = [];
+    let outrosValue = 0;
+    sortedCategories.forEach(cat => {
+      if (cat.value >= threshold) result.push(cat);
+      else outrosValue += cat.value;
+    });
+    if (outrosValue > 0) result.push({ name: 'OUTROS', value: outrosValue });
+    return result;
+  }, [regularData]);
+
+  const { totalSold, chartData, searchedProductName } = useMemo(() => {
+    if (!data.length || !productCode) return { totalSold: 0, chartData: [], searchedProductName: '' };
+    const nameMatch = data.find(item => item.code === productCode);
+    const name = nameMatch ? nameMatch.name : 'Produto não encontrado';
+    const targetData = dateFilteredData.filter(item => item.code === productCode);
+    const total = targetData.reduce((acc, curr) => acc + curr.qty, 0);
+    const aggregatedByDate = targetData.reduce((acc, curr) => {
+      acc[curr.dateStr] = (acc[curr.dateStr] || 0) + curr.qty;
+      return acc;
+    }, {});
+    const chart = Object.keys(aggregatedByDate).map(date => ({
+      data: date,
+      quantidade: aggregatedByDate[date]
+    })).sort((a, b) => {
+      const [d1, m1, y1] = a.data.split('/');
+      const [d2, m2, y2] = b.data.split('/');
+      return new Date(`${y1}-${m1}-${d1}`) - new Date(`${y2}-${m2}-${d2}`);
+    });
+    return { totalSold: total, chartData: chart, searchedProductName: name };
+  }, [data, dateFilteredData, productCode]);
+
+  const multiProductsData = useMemo(() => {
+    if (!data.length) return [];
+    return multiProducts.map(filter => {
+      if (!filter.code) return null;
+      const nameMatch = data.find(item => item.code === filter.code);
+      const name = nameMatch ? nameMatch.name : 'Produto não encontrado';
+      let targetData = data.filter(item => item.code === filter.code);
+      if (filter.startDate || filter.endDate) {
+        const start = filter.startDate ? new Date(`${filter.startDate}T00:00:00`) : new Date('2000-01-01');
+        const end = filter.endDate ? new Date(`${filter.endDate}T23:59:59`) : new Date('2100-01-01');
+        targetData = targetData.filter(item => item.dateObj >= start && item.dateObj <= end);
+      }
+      const total = targetData.reduce((acc, curr) => acc + curr.qty, 0);
+      const aggregatedByDate = targetData.reduce((acc, curr) => {
+        acc[curr.dateStr] = (acc[curr.dateStr] || 0) + curr.qty;
+        return acc;
+      }, {});
+      const chart = Object.keys(aggregatedByDate).map(date => ({
+        data: date,
+        quantidade: aggregatedByDate[date]
+      })).sort((a, b) => {
+        const [d1, m1, y1] = a.data.split('/');
+        const [d2, m2, y2] = b.data.split('/');
+        return new Date(`${y1}-${m1}-${d1}`) - new Date(`${y2}-${m2}-${d2}`);
+      });
+      return { code: filter.code, name, total, chartData: chart };
+    });
+  }, [data, multiProducts]);
+
+  const uniqueCategories = useMemo(() => [...new Set(regularData.map(item => item.category))].sort(), [regularData]);
+  const uniqueStores = useMemo(() => [...new Set(regularData.map(item => item.store))].sort(), [regularData]);
+
+  const storeSpecificProducts = useMemo(() => {
+    if (!selectedStore) return [];
+    const productMap = {};
+    regularData.filter(item => item.store === selectedStore).forEach(item => {
+      if (!productMap[item.code]) productMap[item.code] = { code: item.code, name: item.name, totalQty: 0, totalRevenue: 0 };
+      productMap[item.code].totalQty += item.qty;
+      productMap[item.code].totalRevenue += item.totalValue;
+    });
+    return Object.values(productMap).sort((a, b) => b.totalQty - a.totalQty).slice(0, topProductsLimit);
+  }, [regularData, selectedStore, topProductsLimit]);
+
+  const top10Products = useMemo(() => {
+    const productMap = {};
+    regularData.forEach(item => {
+      if (!productMap[item.code]) productMap[item.code] = { code: item.code, name: item.name, totalQty: 0 };
+      productMap[item.code].totalQty += item.qty;
+    });
+    return Object.values(productMap).sort((a, b) => b.totalQty - a.totalQty).slice(0, 10).map(prod => ({ ...prod, avgPerDay: (prod.totalQty / totalDays).toFixed(2) }));
+  }, [regularData, totalDays]);
+
+  const categoryRanking = useMemo(() => {
+    if (!selectedCategory) return [];
+    const productMap = {};
+    regularData.filter(item => item.category === selectedCategory).forEach(item => {
+      if (!productMap[item.code]) productMap[item.code] = { code: item.code, name: item.name, totalQty: 0 };
+      productMap[item.code].totalQty += item.qty;
+    });
+    return Object.values(productMap).sort((a, b) => b.totalQty - a.totalQty).map(prod => ({ ...prod, avgPerDay: (prod.totalQty / totalDays).toFixed(2) }));
+  }, [regularData, selectedCategory, totalDays]);
+
+  const topPerCategory = useMemo(() => {
+    const catMap = {};
+    regularData.forEach(item => {
+      if (!catMap[item.category]) catMap[item.category] = {};
+      if (!catMap[item.category][item.code]) catMap[item.category][item.code] = { code: item.code, name: item.name, qty: 0 };
+      catMap[item.category][item.code].qty += item.qty;
+    });
+    const result = [];
+    for (const cat in catMap) {
+      const products = Object.values(catMap[cat]);
+      products.sort((a, b) => b.qty - a.qty);
+      if (products.length > 0) result.push({ category: cat, code: products[0].code, name: products[0].name, totalQty: products[0].qty });
+    }
+    return result.sort((a, b) => b.totalQty - a.totalQty);
+  }, [regularData]);
+
+  const cityRanking = useMemo(() => {
+    const cityMap = {};
+    regularData.forEach(item => {
+      if (!cityMap[item.city]) cityMap[item.city] = { city: item.city, totalQty: 0 };
+      cityMap[item.city].totalQty += item.qty;
+    });
+    return Object.values(cityMap).sort((a, b) => b.totalQty - a.totalQty);
+  }, [regularData]);
+
+  const storePerformance = useMemo(() => {
+    const storeMap = {};
+    regularData.forEach(item => {
+      if (!storeMap[item.store]) storeMap[item.store] = { store: item.store, totalQty: 0, totalRevenue: 0, products: {} };
+      storeMap[item.store].totalQty += item.qty;
+      storeMap[item.store].totalRevenue += item.totalValue;
+      if (!storeMap[item.store].products[item.code]) storeMap[item.store].products[item.code] = { name: item.name, qty: 0 };
+      storeMap[item.store].products[item.code].qty += item.qty;
+    });
+    return Object.values(storeMap).map(store => {
+      const topProduct = Object.values(store.products).sort((a, b) => b.qty - a.qty)[0];
+      return { ...store, topProductName: topProduct ? topProduct.name : '-', topProductQty: topProduct ? topProduct.qty : 0 };
+    }).sort((a, b) => b.totalRevenue - a.totalRevenue);
+  }, [regularData]);
+
+  const servicePerformance = useMemo(() => {
+    const svcMap = {};
+    let totalGeral = 0;
+    serviceData.forEach(item => {
+      if (!svcMap[item.code]) svcMap[item.code] = { code: item.code, name: item.name, totalQty: 0, totalRevenue: 0 };
+      svcMap[item.code].totalQty += item.qty;
+      svcMap[item.code].totalRevenue += item.totalValue;
+      totalGeral += item.totalValue;
+    });
+    return { items: Object.values(svcMap).sort((a, b) => b.totalRevenue - a.totalRevenue), totalGeral };
+  }, [serviceData]);
+
+  return (
+    <div className={`dashboard-container ${isPrinting ? 'is-printing' : ''}`}>
+      <header className="header">
+        <div className="header-content">
+          <img src={logo} alt="Logo" className="logo-img" />
+          <h1 className="header-title">Dashboard de Vendas</h1>
+        </div>
+      </header>
+
+      <main className="main-content">
+        
+        {/* Filtros Globais (Não imprimem via CSS) */}
+        <section className="card">
+          <h2 className="filters-title">Filtros Globais de Dados</h2>
+          
+          {dateError && (
+            <div style={{ backgroundColor: '#fef2f2', color: '#b91c1c', padding: '1rem', borderRadius: '8px', marginBottom: '1.5rem', fontWeight: 500, border: '1px solid #fecaca' }}>
+              {dateError}
+            </div>
+          )}
+
+          <div className="filters-grid">
+            <div className="input-group">
+              <label>Arquivo CSV</label>
+              <input type="file" accept=".csv" onChange={handleFileUpload} className="file-input" />
+            </div>
+            <div className="input-group">
+              <label>Data Inicial</label>
+              <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="input-field" />
+            </div>
+            <div className="input-group">
+              <label>Data Final</label>
+              <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="input-field" />
+            </div>
+          </div>
+        </section>
+
+        {data.length > 0 && (
+          <div className="tabs-container">
+            <div className="tabs-header">
+              <button className={`tab-button ${activeTab === 'visao-geral' ? 'active' : ''}`} onClick={() => setActiveTab('visao-geral')}>
+                Visão Geral
+              </button>
+              <button className={`tab-button ${activeTab === 'produtos' ? 'active' : ''}`} onClick={() => setActiveTab('produtos')}>
+                Produtos & Categorias
+              </button>
+              <button className={`tab-button ${activeTab === 'lojas' ? 'active' : ''}`} onClick={() => setActiveTab('lojas')}>
+                Lojas & Cidades
+              </button>
+              <button className={`tab-button ${activeTab === 'servicos' ? 'active' : ''}`} onClick={() => setActiveTab('servicos')}>
+                Serviços Financeiros
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* =========================================
+            ABA 1: VISÃO GERAL
+        ========================================= */}
+        {activeTab === 'visao-geral' && data.length > 0 && (
+          <>
+            {revenueOverview.totalGeral > 0 && (
+              <section className={`results-grid ${getPrintClass('macro')}`} style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', marginBottom: '2rem' }}>
+                <div className="no-print" style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'flex-end', marginBottom: '-1rem' }}>
+                  <button className="print-btn" onClick={() => handlePrint('macro')}>
+                    <PrintIcon /> Imprimir Macro
+                  </button>
+                </div>
+
+                <div className="card kpi-card" style={{ backgroundColor: '#fff7ed', borderColor: '#fdba74' }}>
+                  <span className="kpi-label" style={{ color: '#c2410c' }}>Faturamento Total (Bruto)</span>
+                  <span className="kpi-value" style={{ fontSize: '2.5rem' }}>{formatCurrency(revenueOverview.totalGeral)}</span>
+                  <span className="kpi-subtext" style={{ fontWeight: 'bold', color: '#374151', marginTop: '1rem' }}>
+                    Produtos: <span style={{ color: '#059669' }}>{formatCurrency(revenueOverview.totalProducts)}</span>
+                  </span>
+                  <span className="kpi-subtext" style={{ fontWeight: 'bold', color: '#374151' }}>
+                    Serviços: <span style={{ color: '#ea580c' }}>{formatCurrency(revenueOverview.totalServices)}</span>
+                  </span>
+                </div>
+
+                <div className="card">
+                  <h3 className="chart-title" style={{ textAlign: 'center' }}>Macro: Produtos vs Serviços</h3>
+                  <div className="chart-container" style={{ height: '280px' }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie data={revenueOverview.pieData} cx="50%" cy="50%" innerRadius={60} outerRadius={90} paddingAngle={5} dataKey="value">
+                          {revenueOverview.pieData.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
+                          ))}
+                        </Pie>
+                        <Tooltip formatter={(value) => formatCurrency(value)} />
+                        <Legend verticalAlign="bottom" height={36} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                <div className="card">
+                  <h3 className="chart-title" style={{ textAlign: 'center' }}>Faturamento por Categoria (Físicos)</h3>
+                  <div className="chart-container" style={{ height: '320px' }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie data={categoryRevenueData} cx="50%" cy="45%" innerRadius={55} outerRadius={85} paddingAngle={2} dataKey="value">
+                          {categoryRevenueData.map((entry, index) => (
+                            <Cell key={`cell-cat-pie-${index}`} fill={CATEGORY_COLORS[index % CATEGORY_COLORS.length]} />
+                          ))}
+                        </Pie>
+                        <Tooltip formatter={(value) => formatCurrency(value)} />
+                        <Legend verticalAlign="bottom" layout="horizontal" wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              </section>
+            )}
+
+            {top10Products.length > 0 && (
+              <section className={`card table-section ${getPrintClass('top10')}`}>
+                <div className="section-header">
+                  <h3 className="chart-title">Top 10 Produtos Mais Vendidos (Geral)</h3>
+                  <button className="print-btn no-print" onClick={() => handlePrint('top10')}>
+                    <PrintIcon /> Imprimir Tabela
+                  </button>
+                </div>
+                <div className="table-container">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>Rank</th>
+                        <th>Código</th>
+                        <th>Produto</th>
+                        <th>Total Vendido</th>
+                        <th>Média/Dia</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {top10Products.map((produto, index) => (
+                        <tr key={produto.code}>
+                          <td><span className="rank-badge">{index + 1}</span></td>
+                          <td>{produto.code}</td>
+                          <td style={{ fontWeight: 500 }}>{produto.name}</td>
+                          <td>{produto.totalQty}</td>
+                          <td>{produto.avgPerDay}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            )}
+          </>
+        )}
+
+        {/* =========================================
+            ABA 2: PRODUTOS & CATEGORIAS
+        ========================================= */}
+        {activeTab === 'produtos' && data.length > 0 && (
+          <>
+            <section className={`results-grid ${getPrintClass('prod-unico')}`} style={{ marginBottom: '2rem' }}>
+              <div className="no-print" style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'flex-end', marginBottom: '-1rem' }}>
+                <button className="print-btn" onClick={() => handlePrint('prod-unico')}>
+                  <PrintIcon /> Imprimir Análise Única
+                </button>
+              </div>
+
+              <div className="card kpi-card" style={{ alignSelf: 'start' }}>
+                <div className="input-group no-print" style={{ width: '100%', marginBottom: '1.5rem', textAlign: 'left' }}>
+                  <label>Pesquisar Código Único (Filtro Global)</label>
+                  <input type="text" placeholder="Ex: 1057" value={productCode} onChange={e => setProductCode(e.target.value)} className="input-field" />
+                </div>
+                <span className="kpi-label">Total Vendido</span>
+                <span className="kpi-value">{totalSold}</span>
+                <span className="kpi-subtext" style={{ fontWeight: 'bold', color: '#374151', marginTop: '0.75rem' }}>
+                  {searchedProductName || 'Aguardando código'}
+                </span>
+              </div>
+
+              <div className="card">
+                <h3 className="chart-title">Evolução Diária do Produto</h3>
+                {chartData.length > 0 ? (
+                  <div className="chart-container">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={chartData}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
+                        <XAxis dataKey="data" axisLine={false} tickLine={false} tick={{ fill: '#6b7280', fontSize: 12 }} dy={10} />
+                        <YAxis axisLine={false} tickLine={false} tick={{ fill: '#6b7280', fontSize: 12 }} />
+                        <Tooltip cursor={{ fill: '#f3f4f6' }} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                        <Bar dataKey="quantidade" fill="#ef4444" radius={[4, 4, 0, 0]} barSize={40} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                ) : (
+                  <div className="empty-chart">
+                    <p>Insira um código válido para gerar o gráfico.</p>
+                  </div>
+                )}
+              </div>
+            </section>
+
+            <section className={`card table-section ${getPrintClass('prod-multi')}`} style={{ border: '1px solid #d1d5db', backgroundColor: '#fafafa' }}>
+              <div className="section-header">
+                <div>
+                  <h3 className="chart-title">Análise Individualizada (Até 5 Produtos)</h3>
+                  <p className="kpi-subtext no-print" style={{ margin: 0 }}>Compara múltiplos códigos configurando o período independente. (Ignora data global).</p>
+                </div>
+                <button className="print-btn no-print" onClick={() => handlePrint('prod-multi')}>
+                  <PrintIcon /> Imprimir Bloco
+                </button>
+              </div>
+
+              <div className="no-print" style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '2rem' }}>
+                {multiProducts.map((mp, idx) => (
+                  <div key={idx} style={{ display: 'flex', gap: '1rem', alignItems: 'flex-end', flexWrap: 'wrap', padding: '1rem', backgroundColor: '#ffffff', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
+                    <span style={{ fontWeight: 'bold', color: '#9ca3af', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '24px', height: '24px', backgroundColor: '#f3f4f6', borderRadius: '50%' }}>{idx + 1}</span>
+                    <div className="input-group" style={{ flex: '1', minWidth: '150px' }}>
+                      <label>Código do Produto</label>
+                      <input type="text" value={mp.code} onChange={e => handleMultiProductChange(idx, 'code', e.target.value)} className="input-field" placeholder="Ex: 1057" />
+                    </div>
+                    <div className="input-group" style={{ flex: '1', minWidth: '150px' }}>
+                      <label>Data Inicial</label>
+                      <input type="date" value={mp.startDate} onChange={e => handleMultiProductChange(idx, 'startDate', e.target.value)} className="input-field" />
+                    </div>
+                    <div className="input-group" style={{ flex: '1', minWidth: '150px' }}>
+                      <label>Data Final</label>
+                      <input type="date" value={mp.endDate} onChange={e => handleMultiProductChange(idx, 'endDate', e.target.value)} className="input-field" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {multiProductsData.some(item => item !== null) && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                  {multiProductsData.map((prodData, idx) => {
+                    if (!prodData) return null;
+                    return (
+                      <div key={idx} className="results-grid" style={{ backgroundColor: '#ffffff', padding: '1.5rem', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
+                        <div className="kpi-card" style={{ alignSelf: 'center', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                          <span className="kpi-label" style={{ color: '#3b82f6' }}>CÓD. {prodData.code}</span>
+                          <span className="kpi-value" style={{ fontSize: '2.5rem', background: 'none', color: '#1f2937' }}>{prodData.total}</span>
+                          <span className="kpi-subtext" style={{ fontWeight: 'bold', color: '#4b5563', marginTop: '0.5rem' }}>{prodData.name}</span>
+                        </div>
+                        <div>
+                          <h4 style={{ fontSize: '0.875rem', fontWeight: 600, color: '#6b7280', marginBottom: '1rem', textTransform: 'uppercase' }}>Evolução no Período</h4>
+                          {prodData.chartData.length > 0 ? (
+                            <div style={{ height: '180px', width: '100%' }}>
+                              <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={prodData.chartData}>
+                                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
+                                  <XAxis dataKey="data" axisLine={false} tickLine={false} tick={{ fill: '#9ca3af', fontSize: 10 }} dy={5} />
+                                  <YAxis axisLine={false} tickLine={false} tick={{ fill: '#9ca3af', fontSize: 10 }} />
+                                  <Tooltip cursor={{ fill: '#f9fafb' }} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                                  <Bar dataKey="quantidade" fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={30} />
+                                </BarChart>
+                              </ResponsiveContainer>
+                            </div>
+                          ) : (
+                            <div className="empty-chart" style={{ height: '180px' }}>
+                              <p>Sem vendas no período.</p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+
+            {uniqueCategories.length > 0 && (
+              <section className={`card table-section ${getPrintClass('rank-cat')}`}>
+                <div className="category-header">
+                  <div>
+                    <h3 className="chart-title" style={{ marginBottom: '0.5rem' }}>Ranking por Categoria</h3>
+                  </div>
+                  <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-end' }}>
+                    <div className="input-group no-print" style={{ width: '250px' }}>
+                      <select className="select-field" value={selectedCategory} onChange={(e) => setSelectedCategory(e.target.value)}>
+                        <option value="">Selecione uma categoria...</option>
+                        {uniqueCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                      </select>
+                    </div>
+                    <button className="print-btn no-print" onClick={() => handlePrint('rank-cat')} style={{ height: '42px' }}>
+                      <PrintIcon /> Imprimir
+                    </button>
+                  </div>
+                </div>
+
+                {selectedCategory && (
+                  <div className="table-container">
+                    <table className="data-table">
+                      <thead>
+                        <tr>
+                          <th>Rank</th>
+                          <th>Código</th>
+                          <th>Produto</th>
+                          <th>Total Vendido</th>
+                          <th>Média/Dia</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {categoryRanking.map((produto, index) => (
+                          <tr key={produto.code}>
+                            <td><span className="rank-badge" style={{ backgroundColor: '#6b7280' }}>{index + 1}</span></td>
+                            <td>{produto.code}</td>
+                            <td style={{ fontWeight: 500 }}>{produto.name}</td>
+                            <td>{produto.totalQty}</td>
+                            <td>{produto.avgPerDay}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </section>
+            )}
+
+            {topPerCategory.length > 0 && (
+              <section className={`card table-section ${getPrintClass('top-cat')}`}>
+                <div className="section-header">
+                  <h3 className="chart-title">Produto Mais Vendido de Cada Categoria</h3>
+                  <button className="print-btn no-print" onClick={() => handlePrint('top-cat')}>
+                    <PrintIcon /> Imprimir Tabela
+                  </button>
+                </div>
+                <div className="table-container">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>Categoria</th>
+                        <th>Código</th>
+                        <th>Produto Vencedor</th>
+                        <th>Volume Vendas</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {topPerCategory.map((cat) => (
+                        <tr key={cat.category}>
+                          <td style={{ fontWeight: 'bold', color: '#dc2626' }}>{cat.category}</td>
+                          <td>{cat.code}</td>
+                          <td style={{ fontWeight: 500 }}>{cat.name}</td>
+                          <td>{cat.totalQty}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            )}
+          </>
+        )}
+
+        {/* =========================================
+            ABA 3: LOJAS & CIDADES
+        ========================================= */}
+        {activeTab === 'lojas' && data.length > 0 && (
+          <>
+            {uniqueStores.length > 0 && (
+              <section className={`card table-section ${getPrintClass('top-loja')}`}>
+                <div className="category-header">
+                  <div>
+                    <h3 className="chart-title" style={{ marginBottom: '0.5rem' }}>Top Produtos por Loja</h3>
+                    <p className="kpi-subtext no-print" style={{ margin: 0 }}>Analise o que mais vende em um estabelecimento específico.</p>
+                  </div>
+                  <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-end' }}>
+                    <div className="input-group no-print" style={{ width: '250px' }}>
+                      <label>Estabelecimento</label>
+                      <select className="select-field" value={selectedStore} onChange={(e) => setSelectedStore(e.target.value)}>
+                        <option value="">Selecione uma loja...</option>
+                        {uniqueStores.map(store => <option key={store} value={store}>{store}</option>)}
+                      </select>
+                    </div>
+                    <div className="input-group no-print" style={{ width: '100px' }}>
+                      <label>Limite</label>
+                      <input type="number" min="1" max="30" value={topProductsLimit} onChange={e => setTopProductsLimit(Math.min(30, Math.max(1, Number(e.target.value))))} className="input-field" />
+                    </div>
+                    <button className="print-btn no-print" onClick={() => handlePrint('top-loja')} style={{ height: '42px' }}>
+                      <PrintIcon /> Imprimir
+                    </button>
+                  </div>
+                </div>
+
+                {selectedStore && (
+                  <div className="table-container" style={{ marginTop: '1rem' }}>
+                    <table className="data-table">
+                      <thead>
+                        <tr>
+                          <th>Rank</th>
+                          <th>Código</th>
+                          <th>Produto</th>
+                          <th>Volume Vendido</th>
+                          <th>Receita</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {storeSpecificProducts.map((produto, index) => (
+                          <tr key={produto.code}>
+                            <td><span className="rank-badge" style={{ backgroundColor: '#6b7280' }}>{index + 1}</span></td>
+                            <td>{produto.code}</td>
+                            <td style={{ fontWeight: 500 }}>{produto.name}</td>
+                            <td>{produto.totalQty}</td>
+                            <td style={{ color: '#059669', fontWeight: 500 }}>{formatCurrency(produto.totalRevenue)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </section>
+            )}
+
+            {storePerformance.length > 0 && (
+              <section className={`card table-section ${getPrintClass('desempenho-lojas')}`}>
+                <div className="section-header">
+                  <h3 className="chart-title">Desempenho Geral por Estabelecimento</h3>
+                  <button className="print-btn no-print" onClick={() => handlePrint('desempenho-lojas')}>
+                    <PrintIcon /> Imprimir Tabela
+                  </button>
+                </div>
+                <div className="table-container">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>Loja</th>
+                        <th>Volume Vendas (Unidades)</th>
+                        <th>Receita Total</th>
+                        <th>Produto Mais Vendido (Geral)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {storePerformance.map((loja) => (
+                        <tr key={loja.store}>
+                          <td style={{ fontWeight: 'bold', color: '#dc2626' }}>{loja.store}</td>
+                          <td>{loja.totalQty}</td>
+                          <td style={{ fontWeight: 500, color: '#059669' }}>{formatCurrency(loja.totalRevenue)}</td>
+                          <td>{loja.topProductName} <span style={{ color: '#6b7280', fontSize: '0.75rem' }}>({loja.topProductQty} un.)</span></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            )}
+
+            {cityRanking.length > 0 && (
+              <section className={`card table-section ${getPrintClass('ranking-cidades')}`}>
+                <div className="section-header">
+                  <h3 className="chart-title">Cidades com Maior Volume de Vendas</h3>
+                  <button className="print-btn no-print" onClick={() => handlePrint('ranking-cidades')}>
+                    <PrintIcon /> Imprimir Tabela
+                  </button>
+                </div>
+                <div className="table-container">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>Rank</th>
+                        <th>Cidade</th>
+                        <th>Total Vendido (Unidades)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {cityRanking.map((cidade, index) => (
+                        <tr key={cidade.city}>
+                          <td style={{ width: '60px' }}><span className="rank-badge" style={{ backgroundColor: '#6b7280' }}>{index + 1}</span></td>
+                          <td style={{ fontWeight: 500 }}>{cidade.city}</td>
+                          <td>{cidade.totalQty}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            )}
+          </>
+        )}
+
+        {/* =========================================
+            ABA 4: SERVIÇOS E FINANCEIRO
+        ========================================= */}
+        {activeTab === 'servicos' && data.length > 0 && (
+          <>
+            {servicePerformance.items.length > 0 ? (
+              <section className={`card table-section ${getPrintClass('servicos-det')}`} style={{ border: '2px solid #f97316' }}>
+                <div className="section-header">
+                  <h3 className="chart-title" style={{ color: '#c2410c' }}>Detalhamento: Serviços e Financeiro</h3>
+                  <button className="print-btn no-print" onClick={() => handlePrint('servicos-det')}>
+                    <PrintIcon /> Imprimir Relatório
+                  </button>
+                </div>
+                <div className="table-container">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>Código</th>
+                        <th>Serviço / Item Financeiro</th>
+                        <th>Volume (Unidades)</th>
+                        <th>Receita Gerada</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {servicePerformance.items.map((svc) => (
+                        <tr key={svc.code}>
+                          <td>{svc.code}</td>
+                          <td style={{ fontWeight: 500 }}>{svc.name}</td>
+                          <td>{svc.totalQty}</td>
+                          <td style={{ fontWeight: 'bold', color: '#059669' }}>{formatCurrency(svc.totalRevenue)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            ) : (
+              <div className="card empty-chart">
+                <p>Nenhum serviço financeiro encontrado no período.</p>
+              </div>
+            )}
+          </>
+        )}
+
+      </main>
+    </div>
+  );
+}
