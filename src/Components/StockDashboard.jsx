@@ -74,7 +74,7 @@ export default function StockDashboard() {
               loja: parseInt(row[lojaIdx]) || 0,
               rede: parseInt(row[redeIdx]) || 0,
               venda: parseFloat(cleanVenda) || 0,
-              category: String(row[catIdx] || '').trim() 
+              category: String(row[33] || '').trim() 
             };
           });
         
