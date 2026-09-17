@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import Dashboard from './Components/Dashboard'
+import StockDashboard from './Components/StockDashboard'
 
 
 
@@ -11,6 +12,7 @@ function App() {
         
           <div>
           <Dashboard />
+          <StockDashboard />
         </div>
     
     </>

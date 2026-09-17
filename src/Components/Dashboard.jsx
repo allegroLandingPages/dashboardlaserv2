@@ -472,11 +472,18 @@ export default function Dashboard() {
             </div>
           )}
 
+              <section className="card" style={{ border: '2px dashed #f97316', backgroundColor: '#fff7ed', textAlign: 'center' }}>
+              <h2 className="filters-title" style={{ borderBottom: 'none', color: '#c2410c', marginBottom: '0.5rem' }}>1. Importe o CSV de vendas</h2>
+              <input 
+                type="file" 
+                accept=".csv" 
+                onChange={handleFileUpload} 
+                className="file-input" 
+                style={{ margin: '0 auto', display: 'block' }} 
+              />
+            </section>
           <div className="filters-grid">
-            <div className="input-group">
-              <label>Arquivo CSV</label>
-              <input type="file" accept=".csv" onChange={handleFileUpload} className="file-input" />
-            </div>
+          
             <div className="input-group">
               <label>Data Inicial</label>
               <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="input-field" />
