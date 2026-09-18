@@ -828,7 +828,7 @@ export default function Dashboard() {
                 </button>
               </div>
 
-              <div className="no-print" style={{ display: 'flex', flexDirection: 'row', gap: '1rem', marginBottom: '2rem' }}>
+              <div className="no-print" style={{ display: 'flex', flexDirection: 'row', gap: '1rem', marginBottom: '2rem' ,flexWrap: 'wrap' }}>
                 {multiProducts.map((mp, idx) => (
                   <div key={idx} style={{ display: 'flex', gap: '1rem', alignItems: 'flex-end', flexWrap: 'wrap', padding: '1rem', backgroundColor: '#ffffff', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
                     <span style={{ fontWeight: 'bold', color: '#9ca3af', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '24px', height: '24px', backgroundColor: '#f3f4f6', borderRadius: '50%' }}>{idx + 1}</span>
