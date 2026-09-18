@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import Papa from 'papaparse';
 import './Dashboard.css';
 
@@ -146,17 +146,22 @@ export default function StockDashboard() {
       filtered = filtered.filter(item => item.category === selectedCategory);
     }
     
-    // Ordena sempre pelo produto que tem o maior estoque na REDE
+    
+
     return filtered.sort((a, b) => b.rede - a.rede);
   }, [data, selectedMarca, selectedCategory]);
-
+   const inputRef = useRef(null);
+  
+    const handleDivClick = ()=>{
+      inputRef.current.click()
+    }
   const filteredTotals = useMemo(() => {
     if (!selectedMarca && !selectedCategory) return { l05: 0, loja: 0, rede: 0, patrimonio: 0 };
     return tableData.reduce((acc, curr) => {
       acc.l05 += curr.l05;
       acc.loja += curr.loja;
       acc.rede += curr.rede;
-      acc.patrimonio += (curr.rede * curr.venda); // Multiplica o valor de venda pelo estoque disponível
+      acc.patrimonio += (curr.rede * curr.venda); 
       return acc;
     }, { l05: 0, loja: 0, rede: 0, patrimonio: 0 });
   }, [tableData, selectedMarca, selectedCategory]);
@@ -179,10 +184,11 @@ export default function StockDashboard() {
 
       <main className="main-content">
         
-        <section className="card" style={{ border: '2px dashed #f97316', backgroundColor: '#fff7ed', textAlign: 'center' }}>
+        <section className="card" onClick={handleDivClick} style={{ border: '2px dashed #f97316', backgroundColor: '#fff7ed', textAlign: 'center' , cursor: 'pointer' }}>
           <h2 className="filters-title" style={{ borderBottom: 'none', color: '#c2410c', marginBottom: '0.5rem' }}>1. Importe o CSV de Estoque</h2>
           <input 
-            type="file" 
+            type="file"
+            ref={inputRef}
             accept=".csv" 
             onChange={handleFileUpload} 
             className="file-input" 

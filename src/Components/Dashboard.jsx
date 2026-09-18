@@ -1,8 +1,8 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import Papa from 'papaparse';
 import { 
   BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer, 
-  PieChart, Pie, Cell, Legend, Treemap 
+  PieChart, Pie, Cell, Legend, Treemap, LineChart, Line 
 } from 'recharts';
 import './Dashboard.css';
 import logo from '../assets/logo.png';
@@ -23,6 +23,41 @@ const PrintIcon = () => (
   </svg>
 );
 
+// --- COMPONENTE ACCORDION (SANFONA) ---
+const AccordionSection = ({ id, title, subtitle, printSection, isPrinting, handlePrint, children, defaultOpen = false }) => {
+  const [isOpen, setIsOpen] = useState(defaultOpen);
+  const isThisPrinting = isPrinting && printSection === id;
+  const getPrintClass = () => (isPrinting && printSection === id ? 'print-active' : (isPrinting ? 'no-print' : ''));
+
+  return (
+    <section className={`card table-section ${getPrintClass()}`}>
+      <div 
+        className="section-header" 
+        style={{ cursor: 'pointer', marginBottom: isOpen || isThisPrinting ? '1.5rem' : '0', userSelect: 'none' }} 
+        onClick={() => setIsOpen(!isOpen)}
+      >
+        <div>
+          <h3 className="chart-title" style={{ marginBottom: subtitle ? '0.5rem' : '0', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16" style={{ transform: isOpen || isThisPrinting ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.2s', minWidth: '16px' }}>
+              <path fillRule="evenodd" d="M4.646 1.646a.5.5 0 0 1 .708 0l6 6a.5.5 0 0 1 0 .708l-6 6a.5.5 0 0 1-.708-.708L10.293 8 4.646 2.354a.5.5 0 0 1 0-.708z"/>
+            </svg>
+            {title}
+          </h3>
+          {subtitle && <p className="kpi-subtext no-print" style={{ margin: 0, paddingLeft: '1.5rem' }}>{subtitle}</p>}
+        </div>
+        <button className="print-btn no-print" onClick={(e) => { e.stopPropagation(); handlePrint(id); }}>
+          <PrintIcon /> Imprimir
+        </button>
+      </div>
+      {(isOpen || isThisPrinting) && (
+        <div className="accordion-content">
+          {children}
+        </div>
+      )}
+    </section>
+  );
+};
+
 const SERVICE_KEYWORDS = ['ACRÉSCIMO', 'ACRESCIMO', 'GARANTIA', 'RECARGA', 'SEGURO'];
 const SERVICE_CODES = ['19466', '15489'];
 const PIE_COLORS = ['#059669', '#f97316']; 
@@ -32,24 +67,14 @@ const CATEGORY_COLORS = [
   '#ec4899', '#06b6d4', '#f97316', '#64748b', '#84cc16'
 ];
 
-// Componente Customizado para o Interior do Heatmap/Treemap
 const TreemapCustomContent = ({ depth, x, y, width, height, index, name, value }) => {
   return (
     <g>
-      <rect
-        x={x}
-        y={y}
-        width={width}
-        height={height}
-        fill={CATEGORY_COLORS[index % CATEGORY_COLORS.length]}
-        stroke="#fff"
-        strokeWidth={3}
-      />
-      {/* Exibe o texto apenas se o bloco for grande o suficiente para não sobrepor */}
+      <rect x={x} y={y} width={width} height={height} fill={CATEGORY_COLORS[index % CATEGORY_COLORS.length]} stroke="#fff" strokeWidth={2} />
       {width > 65 && height > 40 && (
-        <text x={x + width / 2} y={y + height / 2} textAnchor="middle" fill="#fff" fontSize={10} fontWeight="normal">
+        <text x={x + width / 2} y={y + height / 2} textAnchor="middle" fill="#fff" fontSize={11} fontWeight="bold">
           <tspan x={x + width / 2} dy="-0.5em">{name}</tspan>
-          <tspan x={x + width / 2} dy="1.4em" fontSize={12} fontWeight="normal">{formatCurrency(value)}</tspan>
+          <tspan x={x + width / 2} dy="1.4em" fontSize={10} fontWeight="normal">{formatCurrency(value)}</tspan>
         </text>
       )}
     </g>
@@ -91,24 +116,6 @@ Object.entries(RAW_STORE_JSON).forEach(([regionName, stores]) => {
   });
 });
 
-const resolveProductCode = (inputStr, dataset) => {
-  if (!inputStr) return null;
-  const upperInput = String(inputStr).trim().toUpperCase();
-  
-  let match = dataset.find(item => item.code.toUpperCase() === upperInput);
-  
-  if (!match && upperInput.includes(' - ')) {
-    const extractedCode = upperInput.split(' - ')[0].trim();
-    match = dataset.find(item => item.code.toUpperCase() === extractedCode);
-  }
-  
-  if (!match) {
-    match = dataset.find(item => item.name.toUpperCase().includes(upperInput));
-  }
-
-  return match ? match.code : String(inputStr).trim(); 
-};
-
 export default function Dashboard() {
   const [data, setData] = useState([]);
   
@@ -125,6 +132,10 @@ export default function Dashboard() {
 
   const [printSection, setPrintSection] = useState(null);
   const isPrinting = printSection !== null;
+
+  const [evolutionScope, setEvolutionScope] = useState('loja'); 
+  const [evolutionSelection, setEvolutionSelection] = useState('');
+  const [multiStores, setMultiStores] = useState(['', '', '', '', '']);
 
   const handlePrint = (sectionId) => {
     setPrintSection(sectionId);
@@ -195,6 +206,12 @@ export default function Dashboard() {
     const newMulti = [...multiProducts];
     newMulti[index][field] = value;
     setMultiProducts(newMulti);
+  };
+
+  const handleMultiStoreChange = (index, value) => {
+    const newStores = [...multiStores];
+    newStores[index] = value;
+    setMultiStores(newStores);
   };
 
   const handleFileUpload = (e) => {
@@ -308,7 +325,6 @@ export default function Dashboard() {
     };
   }, [dateFilteredData]);
 
-  // Mantive a lógica de agrupamento (2%) para não poluir o Heatmap com caixas minúsculas invisíveis
   const categoryRevenueData = useMemo(() => {
     const catMap = {};
     let totalRevenueFisico = 0;
@@ -392,8 +408,9 @@ export default function Dashboard() {
 
   const uniqueCategories = useMemo(() => [...new Set(regularData.map(item => item.category))].sort(), [regularData]);
   const uniqueStores = useMemo(() => [...new Set(regularData.map(item => item.store))].sort(), [regularData]);
+  const uniqueCities = useMemo(() => [...new Set(regularData.map(item => item.city))].sort(), [regularData]);
 
-  const storeSpecificProducts = useMemo(() => {
+  const storeProductsByQty = useMemo(() => {
     if (!selectedStore) return [];
     const productMap = {};
     regularData.filter(item => item.store === selectedStore).forEach(item => {
@@ -404,6 +421,17 @@ export default function Dashboard() {
     return Object.values(productMap).sort((a, b) => b.totalQty - a.totalQty).slice(0, topProductsLimit);
   }, [regularData, selectedStore, topProductsLimit]);
 
+  const storeProductsByRevenue = useMemo(() => {
+    if (!selectedStore) return [];
+    const productMap = {};
+    regularData.filter(item => item.store === selectedStore).forEach(item => {
+      if (!productMap[item.code]) productMap[item.code] = { code: item.code, name: item.name, totalQty: 0, totalRevenue: 0 };
+      productMap[item.code].totalQty += item.qty;
+      productMap[item.code].totalRevenue += item.totalValue;
+    });
+    return Object.values(productMap).sort((a, b) => b.totalRevenue - a.totalRevenue).slice(0, topProductsLimit);
+  }, [regularData, selectedStore, topProductsLimit]);
+
   const top10Products = useMemo(() => {
     const productMap = {};
     regularData.forEach(item => {
@@ -412,6 +440,16 @@ export default function Dashboard() {
     });
     return Object.values(productMap).sort((a, b) => b.totalQty - a.totalQty).slice(0, 10).map(prod => ({ ...prod, avgPerDay: (prod.totalQty / totalDays).toFixed(2) }));
   }, [regularData, totalDays]);
+
+  const top10ProductsByRevenue = useMemo(() => {
+    const productMap = {};
+    regularData.forEach(item => {
+      if (!productMap[item.code]) productMap[item.code] = { code: item.code, name: item.name, totalQty: 0, totalRevenue: 0 };
+      productMap[item.code].totalQty += item.qty;
+      productMap[item.code].totalRevenue += item.totalValue;
+    });
+    return Object.values(productMap).sort((a, b) => b.totalRevenue - a.totalRevenue).slice(0, 10);
+  }, [regularData]);
 
   const categoryRanking = useMemo(() => {
     if (!selectedCategory) return [];
@@ -463,6 +501,31 @@ export default function Dashboard() {
     }).sort((a, b) => b.totalRevenue - a.totalRevenue);
   }, [regularData]);
 
+  // NOVO: Qual loja vende mais de cada categoria (por volume)
+  const topStorePerCategory = useMemo(() => {
+    const catMap = {};
+    regularData.forEach(item => {
+      if (!catMap[item.category]) catMap[item.category] = {};
+      if (!catMap[item.category][item.store]) catMap[item.category][item.store] = { store: item.store, qty: 0, revenue: 0 };
+      catMap[item.category][item.store].qty += item.qty;
+      catMap[item.category][item.store].revenue += item.totalValue;
+    });
+    const result = [];
+    for (const cat in catMap) {
+      const stores = Object.values(catMap[cat]);
+      stores.sort((a, b) => b.qty - a.qty);
+      if (stores.length > 0) {
+        result.push({ 
+          category: cat, 
+          store: stores[0].store, 
+          totalQty: stores[0].qty, 
+          totalRevenue: stores[0].revenue 
+        });
+      }
+    }
+    return result.sort((a, b) => b.totalQty - a.totalQty);
+  }, [regularData]);
+
   const servicePerformance = useMemo(() => {
     const svcMap = {};
     let totalGeral = 0;
@@ -475,6 +538,50 @@ export default function Dashboard() {
     return { items: Object.values(svcMap).sort((a, b) => b.totalRevenue - a.totalRevenue), totalGeral };
   }, [serviceData]);
 
+  const evolutionChartData = useMemo(() => {
+    if (!evolutionSelection) return [];
+    
+    const filtered = regularData.filter(item => {
+      if (evolutionScope === 'loja') return item.store === evolutionSelection;
+      return item.city === evolutionSelection;
+    });
+
+    const map = {};
+    filtered.forEach(item => {
+      if (!map[item.dateStr]) {
+        map[item.dateStr] = { data: item.dateStr, faturamento: 0, dateObj: item.dateObj };
+      }
+      map[item.dateStr].faturamento += item.totalValue;
+    });
+
+    return Object.values(map).sort((a, b) => a.dateObj - b.dateObj);
+  }, [regularData, evolutionScope, evolutionSelection]);
+
+  const comparativeStoreEvolution = useMemo(() => {
+    const activeStores = multiStores.filter(s => s.trim() !== '');
+    if (!regularData.length || activeStores.length === 0) return { chartData: [], lines: [] };
+
+    const map = {};
+    regularData.forEach(item => {
+      if (!map[item.dateStr]) {
+        map[item.dateStr] = { data: item.dateStr, dateObj: item.dateObj };
+        activeStores.forEach(s => map[item.dateStr][s] = 0);
+      }
+      if (activeStores.includes(item.store)) {
+        map[item.dateStr][item.store] += item.totalValue;
+      }
+    });
+
+    const chartData = Object.values(map).sort((a, b) => a.dateObj - b.dateObj);
+    return { chartData, lines: activeStores };
+  }, [regularData, multiStores]);
+  
+  
+  const inputRef = useRef(null);
+  
+    const handleDivClick = ()=>{
+      inputRef.current.click()
+    }
   return (
     <div className={`dashboard-container ${isPrinting ? 'is-printing' : ''}`}>
       
@@ -502,11 +609,11 @@ export default function Dashboard() {
               {dateError}
             </div>
           )}
-          
-          <section className="card" style={{ border: '2px dashed #f97316', backgroundColor: '#fff7ed', textAlign: 'center' }}>
+            <section className="card" onClick={handleDivClick} style={{ border: '2px dashed #f97316', backgroundColor: '#fff7ed', textAlign: 'center' , cursor: 'pointer' }}>
           <h2 className="filters-title" style={{ borderBottom: 'none', color: '#c2410c', marginBottom: '0.5rem' }}>1. Importe o CSV de Estoque</h2>
           <input 
-            type="file" 
+            type="file"
+            ref={inputRef}
             accept=".csv" 
             onChange={handleFileUpload} 
             className="file-input" 
@@ -589,9 +696,6 @@ export default function Dashboard() {
                   <h3 className="chart-title" style={{ textAlign: 'center' }}>Faturamento por Categoria (Heatmap)</h3>
                   <div className="chart-container" style={{ height: '320px' }}>
                     <ResponsiveContainer width="100%" height="100%">
-                      {/* 
-                         TREEMAP sendo utilizado como visualização de HEATMAP 1D para Categorias 
-                      */}
                       <Treemap
                         data={categoryRevenueData}
                         dataKey="value"
@@ -657,7 +761,6 @@ export default function Dashboard() {
               </div>
 
               <div className="card kpi-card" style={{ alignSelf: 'start' }}>
-                
                 <div className="no-print" style={{ width: '100%', marginBottom: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem', textAlign: 'left' }}>
                   <div className="input-group">
                     <label>Código do Produto</label>
@@ -725,11 +828,10 @@ export default function Dashboard() {
                 </button>
               </div>
 
-              <div className="no-print" style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '2rem' }}>
+              <div className="no-print" style={{ display: 'flex', flexDirection: 'row', gap: '1rem', marginBottom: '2rem' }}>
                 {multiProducts.map((mp, idx) => (
                   <div key={idx} style={{ display: 'flex', gap: '1rem', alignItems: 'flex-end', flexWrap: 'wrap', padding: '1rem', backgroundColor: '#ffffff', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
                     <span style={{ fontWeight: 'bold', color: '#9ca3af', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '24px', height: '24px', backgroundColor: '#f3f4f6', borderRadius: '50%' }}>{idx + 1}</span>
-                    
                     <div className="input-group" style={{ flex: '1', minWidth: '100px' }}>
                       <label>Código</label>
                       <input 
@@ -742,7 +844,6 @@ export default function Dashboard() {
                         placeholder="Ex: 1057" 
                       />
                     </div>
-
                     <div className="input-group" style={{ flex: '2', minWidth: '200px' }}>
                       <label>Nome do Produto (SKU)</label>
                       <input 
@@ -755,7 +856,6 @@ export default function Dashboard() {
                         placeholder="Ex: TV 32..." 
                       />
                     </div>
-
                     <div className="input-group" style={{ flex: '1', minWidth: '130px' }}>
                       <label>Data Inicial</label>
                       <input type="date" value={mp.startDate} onChange={e => handleMultiProductChange(idx, 'startDate', e.target.value)} className="input-field" />
@@ -806,6 +906,44 @@ export default function Dashboard() {
               )}
             </section>
 
+            {top10ProductsByRevenue.length > 0 && (
+              <section className={`card table-section ${getPrintClass('top10-faturamento')}`}>
+                <div className="section-header">
+                  <div>
+                    <h3 className="chart-title" style={{ marginBottom: '0.5rem' }}>Top 10 Produtos por Faturamento</h3>
+                    <p className="kpi-subtext" style={{ margin: 0 }}>Os itens que mais geraram receita globalmente.</p>
+                  </div>
+                  <button className="print-btn no-print" onClick={() => handlePrint('top10-faturamento')}>
+                    <PrintIcon /> Imprimir Tabela
+                  </button>
+                </div>
+                <div className="table-container">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>Rank</th>
+                        <th>Código</th>
+                        <th>Produto</th>
+                        <th>Receita Gerada</th>
+                        <th>Volume (Unidades)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {top10ProductsByRevenue.map((produto, index) => (
+                        <tr key={produto.code}>
+                          <td><span className="rank-badge" style={{ backgroundColor: '#059669' }}>{index + 1}</span></td>
+                          <td>{produto.code}</td>
+                          <td style={{ fontWeight: 500 }}>{produto.name}</td>
+                          <td style={{ fontWeight: 'bold', color: '#059669' }}>{formatCurrency(produto.totalRevenue)}</td>
+                          <td>{produto.totalQty}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            )}
+
             {uniqueCategories.length > 0 && (
               <section className={`card table-section ${getPrintClass('rank-cat')}`}>
                 <div className="category-header">
@@ -855,13 +993,13 @@ export default function Dashboard() {
             )}
 
             {topPerCategory.length > 0 && (
-              <section className={`card table-section ${getPrintClass('top-cat')}`}>
-                <div className="section-header">
-                  <h3 className="chart-title">Produto Mais Vendido de Cada Categoria</h3>
-                  <button className="print-btn no-print" onClick={() => handlePrint('top-cat')}>
-                    <PrintIcon /> Imprimir Tabela
-                  </button>
-                </div>
+              <AccordionSection 
+                id="top-cat" 
+                title="Produto Mais Vendido de Cada Categoria" 
+                printSection={printSection} 
+                isPrinting={isPrinting} 
+                handlePrint={handlePrint}
+              >
                 <div className="table-container">
                   <table className="data-table">
                     <thead>
@@ -884,7 +1022,7 @@ export default function Dashboard() {
                     </tbody>
                   </table>
                 </div>
-              </section>
+              </AccordionSection>
             )}
           </>
         )}
@@ -894,12 +1032,127 @@ export default function Dashboard() {
         ========================================= */}
         {activeTab === 'lojas' && data.length > 0 && (
           <>
+            <section className={`card table-section ${getPrintClass('evolucao-loja-cidade')}`}>
+              <div className="section-header">
+                <div>
+                  <h3 className="chart-title" style={{ marginBottom: '0.5rem' }}>Evolução de Faturamento Individual</h3>
+                  <p className="kpi-subtext no-print" style={{ margin: 0 }}>Acompanhe o faturamento diário segmentando por Loja ou Cidade específica.</p>
+                </div>
+                <button className="print-btn no-print" onClick={() => handlePrint('evolucao-loja-cidade')}>
+                  <PrintIcon /> Imprimir Gráfico
+                </button>
+              </div>
+
+              <div className="no-print" style={{ display: 'flex', gap: '1rem', marginBottom: '2rem' }}>
+                <div className="input-group" style={{ width: '200px' }}>
+                  <label>Agrupar por</label>
+                  <select className="select-field" value={evolutionScope} onChange={e => { setEvolutionScope(e.target.value); setEvolutionSelection(''); }}>
+                    <option value="loja">Loja Específica</option>
+                    <option value="cidade">Cidade Inteira</option>
+                  </select>
+                </div>
+                <div className="input-group" style={{ width: '300px' }}>
+                  <label>{evolutionScope === 'loja' ? 'Selecione a Loja' : 'Selecione a Cidade'}</label>
+                  <select className="select-field" value={evolutionSelection} onChange={e => setEvolutionSelection(e.target.value)}>
+                    <option value="">Selecione...</option>
+                    {evolutionScope === 'loja' 
+                      ? uniqueStores.map(item => <option key={item} value={item}>{item}</option>)
+                      : uniqueCities.map(item => <option key={item} value={item}>{item}</option>)
+                    }
+                  </select>
+                </div>
+              </div>
+
+              {evolutionSelection && (
+                <div className="chart-container" style={{ height: '350px' }}>
+                  {evolutionChartData.length > 0 ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={evolutionChartData}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
+                        <XAxis dataKey="data" axisLine={false} tickLine={false} tick={{ fill: '#6b7280', fontSize: 12 }} dy={10} />
+                        <YAxis axisLine={false} tickLine={false} tick={{ fill: '#6b7280', fontSize: 12 }} tickFormatter={(val) => `R$ ${val / 1000}k`} />
+                        <Tooltip 
+                          cursor={{ fill: '#f3f4f6' }} 
+                          formatter={(value) => formatCurrency(value)}
+                          contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} 
+                        />
+                        <Bar dataKey="faturamento" name="Faturamento" fill="#f97316" radius={[4, 4, 0, 0]} maxBarSize={50} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="empty-chart">Sem dados de faturamento para o período.</div>
+                  )}
+                </div>
+              )}
+            </section>
+
+            <section className={`card table-section ${getPrintClass('comparativo-lojas')}`}>
+              <div className="section-header">
+                <div>
+                  <h3 className="chart-title" style={{ marginBottom: '0.5rem' }}>Comparativo Diário Customizado</h3>
+                  <p className="kpi-subtext no-print" style={{ margin: 0 }}>Selecione até 5 lojas manualmente para colocar o faturamento lado a lado.</p>
+                </div>
+                <button className="print-btn no-print" onClick={() => handlePrint('comparativo-lojas')}>
+                  <PrintIcon /> Imprimir Gráfico
+                </button>
+              </div>
+
+              <div className="no-print" style={{ display: 'flex', flexDirection: 'row', gap: '1rem', marginBottom: '2rem' }}>
+                {multiStores.map((store, idx) => (
+                  <div key={idx} className="input-group" style={{ flexDirection: 'row', alignItems: 'center', gap: '1rem' }}>
+                     <span style={{ fontWeight: 'bold', color: '#9ca3af', width: '20px' }}>{idx + 1}.</span>
+                     <select 
+                       className="select-field" 
+                       value={store} 
+                       onChange={e => handleMultiStoreChange(idx, e.target.value)}
+                       style={{ maxWidth: '400px' }}
+                     >
+                       <option value="">Selecione uma loja para comparar...</option>
+                       {uniqueStores.map(s => <option key={s} value={s}>{s}</option>)}
+                     </select>
+                  </div>
+                ))}
+              </div>
+
+              {comparativeStoreEvolution.lines.length > 0 ? (
+                <div className="chart-container" style={{ height: '400px' }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={comparativeStoreEvolution.chartData}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
+                      <XAxis dataKey="data" axisLine={false} tickLine={false} tick={{ fill: '#6b7280', fontSize: 12 }} dy={10} />
+                      <YAxis axisLine={false} tickLine={false} tick={{ fill: '#6b7280', fontSize: 12 }} tickFormatter={(val) => `R$ ${val / 1000}k`} />
+                      <Tooltip 
+                        cursor={{ stroke: '#d1d5db', strokeWidth: 1, strokeDasharray: '3 3' }} 
+                        formatter={(value) => formatCurrency(value)}
+                        contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} 
+                      />
+                      <Legend verticalAlign="bottom" wrapperStyle={{ paddingTop: '20px', fontSize: '11px' }} />
+                      {comparativeStoreEvolution.lines.map((lineName, index) => (
+                        <Line 
+                          key={lineName} 
+                          type="monotone" 
+                          dataKey={lineName} 
+                          name={lineName} 
+                          stroke={CATEGORY_COLORS[index % CATEGORY_COLORS.length]} 
+                          strokeWidth={2} 
+                          dot={{ r: 3, strokeWidth: 0 }} 
+                          activeDot={{ r: 5 }} 
+                        />
+                      ))}
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              ) : (
+                <div className="empty-chart">Selecione pelo menos uma loja para visualizar a comparação.</div>
+              )}
+            </section>
+
             {uniqueStores.length > 0 && (
               <section className={`card table-section ${getPrintClass('top-loja')}`}>
                 <div className="category-header">
                   <div>
-                    <h3 className="chart-title" style={{ marginBottom: '0.5rem' }}>Top Produtos por Loja</h3>
-                    <p className="kpi-subtext no-print" style={{ margin: 0 }}>Analise o que mais vende em um estabelecimento específico.</p>
+                    <h3 className="chart-title" style={{ marginBottom: '0.5rem' }}>Top Produtos por Loja (Volume)</h3>
+                    <p className="kpi-subtext no-print" style={{ margin: 0 }}>Analise o que mais vende em quantidade em um estabelecimento específico.</p>
                   </div>
                   <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-end' }}>
                     <div className="input-group no-print" style={{ width: '250px' }}>
@@ -932,7 +1185,7 @@ export default function Dashboard() {
                         </tr>
                       </thead>
                       <tbody>
-                        {storeSpecificProducts.map((produto, index) => (
+                        {storeProductsByQty.map((produto, index) => (
                           <tr key={produto.code}>
                             <td><span className="rank-badge" style={{ backgroundColor: '#6b7280' }}>{index + 1}</span></td>
                             <td>{produto.code}</td>
@@ -948,14 +1201,86 @@ export default function Dashboard() {
               </section>
             )}
 
-            {storePerformance.length > 0 && (
-              <section className={`card table-section ${getPrintClass('desempenho-lojas')}`}>
+            {selectedStore && storeProductsByRevenue.length > 0 && (
+              <section className={`card table-section ${getPrintClass('top-loja-fat')}`}>
                 <div className="section-header">
-                  <h3 className="chart-title">Desempenho Geral por Estabelecimento</h3>
-                  <button className="print-btn no-print" onClick={() => handlePrint('desempenho-lojas')}>
+                  <div>
+                    <h3 className="chart-title" style={{ marginBottom: '0.5rem' }}>Top Produtos por Faturamento na Loja</h3>
+                    <p className="kpi-subtext" style={{ margin: 0 }}>Os itens que representam a maior parte da receita desta loja.</p>
+                  </div>
+                  <button className="print-btn no-print" onClick={() => handlePrint('top-loja-fat')}>
                     <PrintIcon /> Imprimir Tabela
                   </button>
                 </div>
+                <div className="table-container">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>Rank</th>
+                        <th>Código</th>
+                        <th>Produto</th>
+                        <th>Receita Gerada</th>
+                        <th>Volume</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {storeProductsByRevenue.map((produto, index) => (
+                        <tr key={produto.code}>
+                          <td><span className="rank-badge" style={{ backgroundColor: '#059669' }}>{index + 1}</span></td>
+                          <td>{produto.code}</td>
+                          <td style={{ fontWeight: 500 }}>{produto.name}</td>
+                          <td style={{ fontWeight: 'bold', color: '#059669' }}>{formatCurrency(produto.totalRevenue)}</td>
+                          <td>{produto.totalQty}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            )}
+
+            {topStorePerCategory.length > 0 && (
+              <AccordionSection 
+                id="loja-destaque-cat" 
+                title="Loja Destaque por Categoria" 
+                subtitle="Qual estabelecimento mais vende (em volume) cada categoria de produto."
+                printSection={printSection} 
+                isPrinting={isPrinting} 
+                handlePrint={handlePrint}
+              >
+                <div className="table-container">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>Categoria</th>
+                        <th>Loja Líder</th>
+                        <th>Volume Vendido</th>
+                        <th>Receita da Categoria</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {topStorePerCategory.map((cat) => (
+                        <tr key={cat.category}>
+                          <td style={{ fontWeight: 'bold', color: '#dc2626' }}>{cat.category}</td>
+                          <td style={{ fontWeight: 500 }}>{cat.store}</td>
+                          <td>{cat.totalQty}</td>
+                          <td style={{ color: '#059669', fontWeight: 500 }}>{formatCurrency(cat.totalRevenue)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </AccordionSection>
+            )}
+
+            {storePerformance.length > 0 && (
+              <AccordionSection 
+                id="desempenho-lojas" 
+                title="Desempenho Geral por Estabelecimento" 
+                printSection={printSection} 
+                isPrinting={isPrinting} 
+                handlePrint={handlePrint}
+              >
                 <div className="table-container">
                   <table className="data-table">
                     <thead>
@@ -978,7 +1303,7 @@ export default function Dashboard() {
                     </tbody>
                   </table>
                 </div>
-              </section>
+              </AccordionSection>
             )}
 
             {cityRanking.length > 0 && (
