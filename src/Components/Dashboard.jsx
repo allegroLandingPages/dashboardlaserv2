@@ -610,7 +610,7 @@ export default function Dashboard() {
             </div>
           )}
             <section className="card" onClick={handleDivClick} style={{ border: '2px dashed #f97316', backgroundColor: '#fff7ed', textAlign: 'center' , cursor: 'pointer' }}>
-          <h2 className="filters-title" style={{ borderBottom: 'none', color: '#c2410c', marginBottom: '0.5rem' }}>1. Importe o CSV de Estoque</h2>
+          <h2 className="filters-title" style={{ borderBottom: 'none', color: '#c2410c', marginBottom: '0.5rem' }}>1. Importe o CSV de Vendas</h2>
           <input 
             type="file"
             ref={inputRef}
@@ -1307,6 +1307,13 @@ export default function Dashboard() {
             )}
 
             {cityRanking.length > 0 && (
+               <AccordionSection 
+               id="desempenho-lojas" 
+               title="Desempenho Geral por Estabelecimento" 
+               printSection={printSection} 
+               isPrinting={isPrinting} 
+               handlePrint={handlePrint}
+             >
               <section className={`card table-section ${getPrintClass('ranking-cidades')}`}>
                 <div className="section-header">
                   <h3 className="chart-title">Cidades com Maior Volume de Vendas</h3>
@@ -1335,6 +1342,7 @@ export default function Dashboard() {
                   </table>
                 </div>
               </section>
+              </AccordionSection>
             )}
           </>
         )}
