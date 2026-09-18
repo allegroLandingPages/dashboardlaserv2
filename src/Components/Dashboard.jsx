@@ -1309,7 +1309,7 @@ export default function Dashboard() {
             {cityRanking.length > 0 && (
                <AccordionSection 
                id="desempenho-lojas" 
-               title="Desempenho Geral por Estabelecimento" 
+               title="Desempenho Geral por cidade"
                printSection={printSection} 
                isPrinting={isPrinting} 
                handlePrint={handlePrint}
