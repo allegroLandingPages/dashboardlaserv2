@@ -3,3 +3,9 @@
   margin:0;
   box-sizing:border-box;
 }
+footer{
+  background-color: #ff0606;
+  text-align: center;
+    padding: 16px;
+    color: #ffffff;
+}
