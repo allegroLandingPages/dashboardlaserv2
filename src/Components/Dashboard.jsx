@@ -1043,7 +1043,7 @@ export default function Dashboard() {
                 </button>
               </div>
 
-              <div className="no-print" style={{ display: 'flex', gap: '1rem', marginBottom: '2rem' }}>
+              <div className="no-print" style={{ display: 'flex', gap: '1rem', marginBottom: '2rem', flexWrap: 'wrap' }}>
                 <div className="input-group" style={{ width: '200px' }}>
                   <label>Agrupar por</label>
                   <select className="select-field" value={evolutionScope} onChange={e => { setEvolutionScope(e.target.value); setEvolutionSelection(''); }}>
@@ -1097,7 +1097,7 @@ export default function Dashboard() {
                 </button>
               </div>
 
-              <div className="no-print" style={{ display: 'flex', flexDirection: 'row', gap: '1rem', marginBottom: '2rem' }}>
+              <div className="no-print" style={{ display: 'flex', flexDirection: 'row', gap: '1rem', marginBottom: '2rem', flexWrap: 'wrap' }}>
                 {multiStores.map((store, idx) => (
                   <div key={idx} className="input-group" style={{ flexDirection: 'row', alignItems: 'center', gap: '1rem' }}>
                      <span style={{ fontWeight: 'bold', color: '#9ca3af', width: '20px' }}>{idx + 1}.</span>
@@ -1154,7 +1154,7 @@ export default function Dashboard() {
                     <h3 className="chart-title" style={{ marginBottom: '0.5rem' }}>Top Produtos por Loja (Volume)</h3>
                     <p className="kpi-subtext no-print" style={{ margin: 0 }}>Analise o que mais vende em quantidade em um estabelecimento específico.</p>
                   </div>
-                  <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-end' }}>
+                  <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-end',flexWrap: 'wrap' }}>
                     <div className="input-group no-print" style={{ width: '250px' }}>
                       <label>Estabelecimento</label>
                       <select className="select-field" value={selectedStore} onChange={(e) => setSelectedStore(e.target.value)}>
