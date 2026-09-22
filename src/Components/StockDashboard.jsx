@@ -155,6 +155,7 @@ export default function StockDashboard() {
     const handleDivClick = ()=>{
       inputRef.current.click()
     }
+    
   const filteredTotals = useMemo(() => {
     if (!selectedMarca && !selectedCategory) return { l05: 0, loja: 0, rede: 0, patrimonio: 0 };
     return tableData.reduce((acc, curr) => {
