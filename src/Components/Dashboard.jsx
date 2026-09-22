@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo,useRef } from 'react';
 import Papa from 'papaparse';
 import { 
   BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer, 
@@ -23,7 +23,6 @@ const PrintIcon = () => (
   </svg>
 );
 
-// --- COMPONENTE ACCORDION (SANFONA) ---
 const AccordionSection = ({ id, title, subtitle, printSection, isPrinting, handlePrint, children, defaultOpen = false }) => {
   const [isOpen, setIsOpen] = useState(defaultOpen);
   const isThisPrinting = isPrinting && printSection === id;
@@ -147,7 +146,10 @@ export default function Dashboard() {
 
   const getPrintClass = (id) => (isPrinting && printSection === id ? 'print-active' : '');
 
+  // Atualizado para 7 Produtos
   const [multiProducts, setMultiProducts] = useState([
+    { code: '', name: '', startDate: '', endDate: '' },
+    { code: '', name: '', startDate: '', endDate: '' },
     { code: '', name: '', startDate: '', endDate: '' },
     { code: '', name: '', startDate: '', endDate: '' },
     { code: '', name: '', startDate: '', endDate: '' },
@@ -501,7 +503,6 @@ export default function Dashboard() {
     }).sort((a, b) => b.totalRevenue - a.totalRevenue);
   }, [regularData]);
 
-  // NOVO: Qual loja vende mais de cada categoria (por volume)
   const topStorePerCategory = useMemo(() => {
     const catMap = {};
     regularData.forEach(item => {
@@ -557,6 +558,11 @@ export default function Dashboard() {
     return Object.values(map).sort((a, b) => a.dateObj - b.dateObj);
   }, [regularData, evolutionScope, evolutionSelection]);
 
+  // NOVO: Cálculo do Faturamento Total gerado na seleção atual da Evolução
+  const evolutionTotalRevenue = useMemo(() => {
+    return evolutionChartData.reduce((acc, curr) => acc + curr.faturamento, 0);
+  }, [evolutionChartData]);
+
   const comparativeStoreEvolution = useMemo(() => {
     const activeStores = multiStores.filter(s => s.trim() !== '');
     if (!regularData.length || activeStores.length === 0) return { chartData: [], lines: [] };
@@ -575,13 +581,12 @@ export default function Dashboard() {
     const chartData = Object.values(map).sort((a, b) => a.dateObj - b.dateObj);
     return { chartData, lines: activeStores };
   }, [regularData, multiStores]);
-  
-  
-  const inputRef = useRef(null);
-  
-    const handleDivClick = ()=>{
-      inputRef.current.click()
-    }
+     const inputRef = useRef(null);
+    
+      const handleDivClick = ()=>{
+        inputRef.current.click()
+      }
+      
   return (
     <div className={`dashboard-container ${isPrinting ? 'is-printing' : ''}`}>
       
@@ -609,8 +614,8 @@ export default function Dashboard() {
               {dateError}
             </div>
           )}
-            <section className="card" onClick={handleDivClick} style={{ border: '2px dashed #f97316', backgroundColor: '#fff7ed', textAlign: 'center' , cursor: 'pointer' }}>
-          <h2 className="filters-title" style={{ borderBottom: 'none', color: '#c2410c', marginBottom: '0.5rem' }}>1. Importe o CSV de Vendas</h2>
+          <section className="card" onClick={handleDivClick} style={{ border: '2px dashed #f97316', backgroundColor: '#fff7ed', textAlign: 'center' , cursor: 'pointer' }}>
+          <h2 className="filters-title" style={{ borderBottom: 'none', color: '#c2410c', marginBottom: '0.5rem' }}>1. Importe o CSV de Estoque</h2>
           <input 
             type="file"
             ref={inputRef}
@@ -621,6 +626,7 @@ export default function Dashboard() {
           />
         </section>
           <div className="filters-grid">
+           
             <div className="input-group">
               <label>Data Inicial</label>
               <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="input-field" />
@@ -820,7 +826,7 @@ export default function Dashboard() {
             <section className={`card table-section ${getPrintClass('prod-multi')}`} style={{ border: '1px solid #d1d5db', backgroundColor: '#fafafa' }}>
               <div className="section-header">
                 <div>
-                  <h3 className="chart-title">Análise Individualizada (Até 5 Produtos)</h3>
+                  <h3 className="chart-title">Análise Individualizada (Até 7 Produtos)</h3>
                   <p className="kpi-subtext no-print" style={{ margin: 0 }}>Compara múltiplos códigos configurando o período independente. (Ignora data global).</p>
                 </div>
                 <button className="print-btn no-print" onClick={() => handlePrint('prod-multi')}>
@@ -828,9 +834,9 @@ export default function Dashboard() {
                 </button>
               </div>
 
-              <div className="no-print" style={{ display: 'flex', flexDirection: 'row', gap: '1rem', marginBottom: '2rem' ,flexWrap: 'wrap' }}>
+              <div className="no-print" style={{ display: 'flex', flexDirection: 'row', gap: '1rem', marginBottom: '2rem', flexWrap: 'wrap' }}>
                 {multiProducts.map((mp, idx) => (
-                  <div key={idx} style={{ display: 'flex', gap: '1rem', alignItems: 'flex-end', flexWrap: 'wrap', padding: '1rem', backgroundColor: '#ffffff', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
+                  <div key={idx} style={{ display: 'flex', gap: '1rem', alignItems: 'flex-end', flexWrap: 'wrap', padding: '1rem', backgroundColor: '#ffffff', borderRadius: '8px', border: '1px solid #e5e7eb', maxWidth: '210px' }}>
                     <span style={{ fontWeight: 'bold', color: '#9ca3af', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '24px', height: '24px', backgroundColor: '#f3f4f6', borderRadius: '50%' }}>{idx + 1}</span>
                     <div className="input-group" style={{ flex: '1', minWidth: '100px' }}>
                       <label>Código</label>
@@ -844,7 +850,7 @@ export default function Dashboard() {
                         placeholder="Ex: 1057" 
                       />
                     </div>
-                    <div className="input-group" style={{ flex: '2', minWidth: '200px' }}>
+                    <div className="input-group" style={{ flex: '2', minWidth: '130px' }}>
                       <label>Nome do Produto (SKU)</label>
                       <input 
                         type="text" 
@@ -856,11 +862,11 @@ export default function Dashboard() {
                         placeholder="Ex: TV 32..." 
                       />
                     </div>
-                    <div className="input-group" style={{ flex: '1', minWidth: '130px' }}>
+                    <div className="input-group" style={{ flex: '1', minWidth: '110px', }}>
                       <label>Data Inicial</label>
                       <input type="date" value={mp.startDate} onChange={e => handleMultiProductChange(idx, 'startDate', e.target.value)} className="input-field" />
                     </div>
-                    <div className="input-group" style={{ flex: '1', minWidth: '130px' }}>
+                    <div className="input-group" style={{ flex: '1', minWidth: '110px' }}>
                       <label>Data Final</label>
                       <input type="date" value={mp.endDate} onChange={e => handleMultiProductChange(idx, 'endDate', e.target.value)} className="input-field" />
                     </div>
@@ -1043,7 +1049,7 @@ export default function Dashboard() {
                 </button>
               </div>
 
-              <div className="no-print" style={{ display: 'flex', gap: '1rem', marginBottom: '2rem', flexWrap: 'wrap' }}>
+              <div className="no-print" style={{ display: 'flex', gap: '1rem', marginBottom: '2rem' }}>
                 <div className="input-group" style={{ width: '200px' }}>
                   <label>Agrupar por</label>
                   <select className="select-field" value={evolutionScope} onChange={e => { setEvolutionScope(e.target.value); setEvolutionSelection(''); }}>
@@ -1064,25 +1070,36 @@ export default function Dashboard() {
               </div>
 
               {evolutionSelection && (
-                <div className="chart-container" style={{ height: '350px' }}>
-                  {evolutionChartData.length > 0 ? (
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={evolutionChartData}>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
-                        <XAxis dataKey="data" axisLine={false} tickLine={false} tick={{ fill: '#6b7280', fontSize: 12 }} dy={10} />
-                        <YAxis axisLine={false} tickLine={false} tick={{ fill: '#6b7280', fontSize: 12 }} tickFormatter={(val) => `R$ ${val / 1000}k`} />
-                        <Tooltip 
-                          cursor={{ fill: '#f3f4f6' }} 
-                          formatter={(value) => formatCurrency(value)}
-                          contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} 
-                        />
-                        <Bar dataKey="faturamento" name="Faturamento" fill="#f97316" radius={[4, 4, 0, 0]} maxBarSize={50} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  ) : (
-                    <div className="empty-chart">Sem dados de faturamento para o período.</div>
-                  )}
-                </div>
+                <>
+                  <div className="kpi-card" style={{ alignSelf: 'flex-start', margin: '0 auto 1.5rem auto', backgroundColor: '#fff7ed', border: '1px solid #fdba74', padding: '1.5rem', borderRadius: '12px' }}>
+                    <span className="kpi-label" style={{ color: '#c2410c' }}>
+                      Faturamento Total da {evolutionScope === 'loja' ? 'Loja' : 'Cidade'} no Período
+                    </span>
+                    <span className="kpi-value" style={{ fontSize: '2.5rem' }}>
+                      {formatCurrency(evolutionTotalRevenue)}
+                    </span>
+                  </div>
+
+                  <div className="chart-container" style={{ height: '350px' }}>
+                    {evolutionChartData.length > 0 ? (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={evolutionChartData}>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
+                          <XAxis dataKey="data" axisLine={false} tickLine={false} tick={{ fill: '#6b7280', fontSize: 12 }} dy={10} />
+                          <YAxis axisLine={false} tickLine={false} tick={{ fill: '#6b7280', fontSize: 12 }} tickFormatter={(val) => `R$ ${val / 1000}k`} />
+                          <Tooltip 
+                            cursor={{ fill: '#f3f4f6' }} 
+                            formatter={(value) => formatCurrency(value)}
+                            contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} 
+                          />
+                          <Bar dataKey="faturamento" name="Faturamento Diário" fill="#f97316" radius={[4, 4, 0, 0]} maxBarSize={50} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div className="empty-chart">Sem dados de faturamento para o período.</div>
+                    )}
+                  </div>
+                </>
               )}
             </section>
 
@@ -1099,7 +1116,7 @@ export default function Dashboard() {
 
               <div className="no-print" style={{ display: 'flex', flexDirection: 'row', gap: '1rem', marginBottom: '2rem', flexWrap: 'wrap' }}>
                 {multiStores.map((store, idx) => (
-                  <div key={idx} className="input-group" style={{ flexDirection: 'row', alignItems: 'center', gap: '1rem' }}>
+                  <div key={idx} className="input-group" style={{ flexDirection: 'row', alignItems: 'center', gap: '1rem' ,maxWidth: '210px' }}>
                      <span style={{ fontWeight: 'bold', color: '#9ca3af', width: '20px' }}>{idx + 1}.</span>
                      <select 
                        className="select-field" 
@@ -1154,7 +1171,7 @@ export default function Dashboard() {
                     <h3 className="chart-title" style={{ marginBottom: '0.5rem' }}>Top Produtos por Loja (Volume)</h3>
                     <p className="kpi-subtext no-print" style={{ margin: 0 }}>Analise o que mais vende em quantidade em um estabelecimento específico.</p>
                   </div>
-                  <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-end',flexWrap: 'wrap' }}>
+                  <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-end' }}>
                     <div className="input-group no-print" style={{ width: '250px' }}>
                       <label>Estabelecimento</label>
                       <select className="select-field" value={selectedStore} onChange={(e) => setSelectedStore(e.target.value)}>
@@ -1307,13 +1324,6 @@ export default function Dashboard() {
             )}
 
             {cityRanking.length > 0 && (
-               <AccordionSection 
-               id="desempenho-lojas" 
-               title="Desempenho Geral por cidade"
-               printSection={printSection} 
-               isPrinting={isPrinting} 
-               handlePrint={handlePrint}
-             >
               <section className={`card table-section ${getPrintClass('ranking-cidades')}`}>
                 <div className="section-header">
                   <h3 className="chart-title">Cidades com Maior Volume de Vendas</h3>
@@ -1342,7 +1352,6 @@ export default function Dashboard() {
                   </table>
                 </div>
               </section>
-              </AccordionSection>
             )}
           </>
         )}
