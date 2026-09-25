@@ -13,6 +13,7 @@ export default function AccordionSection({ id, title, subtitle, printSection, is
   const isThisPrinting = isPrinting && printSection === id;
   const getPrintClass = () => (isPrinting && printSection === id ? 'print-active' : (isPrinting ? 'no-print' : ''));
 
+  
   return (
     <section className={`card table-section ${getPrintClass()}`}>
       <div 

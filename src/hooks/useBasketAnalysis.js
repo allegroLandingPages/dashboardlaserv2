@@ -107,6 +107,7 @@ export function useBasketAnalysis(dateFilteredData, data, uniqueProductsData) {
             suggestionsMap[p.code].frequency += 1;
           }
         });
+        
       }
     });
 
