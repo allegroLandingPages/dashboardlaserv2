@@ -1,13 +1,15 @@
-import GlobalFilters from '@/components/GlobalFilters';
-import VisaoGeralTab from '@/components/tabs/VisaoGeralTab';
-import ProdutosTab from '@/components/tabs/ProdutosTab';
-import LojasTab from '@/components/tabs/LojasTab';
-import ServicosTab from '@/components/tabs/ServicosTab';
-import EstoqueTab from '@/components/tabs/EstoqueTab';
-import PrevisibilidadeTab from '@/components/tabs/PrevisibilidadeTab';
-import DesempenhoTab from '@/components/tabs/DesempenhoTab';
-import PrecificacaoTab from '@/components/tabs/PrecificacaoTab';
-import CestaComprasTab from '@/components/tabs/CestaComprasTab';
+import React, { useState } from 'react';
+import { useSalesData } from '../hooks/useSalesData';
+import GlobalFilters from '../components/GlobalFilters';
+import VisaoGeralTab from '../components/tabs/VisaoGeralTab';
+import ProdutosTab from '../components/tabs/ProdutosTab';
+import LojasTab from '../components/tabs/LojasTab';
+import ServicosTab from '../components/tabs/ServicosTab';
+import EstoqueTab from '../components/tabs/EstoqueTab';
+import PrevisibilidadeTab from '../components/tabs/PrevisibilidadeTab';
+import DesempenhoTab from '../components/tabs/DesempenhoTab';
+import PrecificacaoTab from '../components/tabs/PrecificacaoTab';
+import CestaComprasTab from '../components/tabs/CestaComprasTab';
 import './Dashboard.css';
 
 // ÍCONES SVG DA APLICAÇÃO
