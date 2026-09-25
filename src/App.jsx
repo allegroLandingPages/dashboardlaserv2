@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import Dashboard from './Components/Dashboard'
+import Dashboard from './pages/Dashboard'
 import StockDashboard from './Components/StockDashboard'
 
 

@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useRef } from 'react';
 import Papa from 'papaparse';
-import '../pages/Dashboard.css';
+import './Dashboard.css';
 
 const formatCurrency = (value) => 
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
